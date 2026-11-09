@@ -6,6 +6,7 @@ import {
     canonicalPhone, type LojaShopping,
 } from '../services/supabaseService';
 import { telefoneDoAparelho, guardarTelefoneDoAparelho, apagarTelefoneDoAparelho } from '../utils/telefoneCliente';
+import { InstalarApp } from '../components/InstalarApp';
 
 // Perfil do cliente. Entra só com o telefone, sem validação (mesmo jeito do Papa-Leguas).
 // O telefone fica guardado neste aparelho. Lojista entra pelo botão "Sou lojista" (/entrar).
@@ -96,6 +97,7 @@ const PerfilPage: React.FC = () => {
                 </header>
 
                 <main className="flex flex-col gap-6 px-4 pt-6">
+                    <div className="-mx-4"><InstalarApp escuro comFechar={false} /></div>
                     {!telefone ? (
                         <section style={corte(14)} className="bg-[#F7EFE4] text-[#15121A] p-5 flex flex-col gap-3 border-2 border-[#F7EFE4]">
                             <h1 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[30px] tracking-wide uppercase leading-none">ENTRE COM O SEU TELEFONE</h1>

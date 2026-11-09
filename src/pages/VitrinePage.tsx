@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { fetchLojasShopping, fetchInfoLojasShopping, type LojaShopping } from '../services/supabaseService';
 import { statusDaLoja, type InfoLojaShopping } from '../utils/lojaAberta';
+import { InstalarApp } from '../components/InstalarApp';
 
 // Nova home do shopping (desenho aprovado na rodada 4). Rota /vitrine, separada da /shopping atual.
 // Só mostra o que existe no banco: nome, logo, categoria e cidade da loja. Dono, tempo, taxa e
@@ -181,6 +182,8 @@ const VitrinePage: React.FC = () => {
                 </header>
 
                 <main className="flex flex-col gap-4 pt-3">
+
+                    <InstalarApp escuro />
 
                     {/* Categorias */}
                     <section className="flex flex-col gap-2.5">
