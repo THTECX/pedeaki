@@ -67,7 +67,16 @@ export const MotoboyPage: React.FC = () => {
         setPainel(p);
     }, [token]);
 
-    useEffect(() => { if (!token) return; atualizar(); const i = setInterval(atualizar, 5000); return () => clearInterval(i); }, [token, atualizar]);
+    useEffect(() => {
+        if (!token) return;
+        atualizar();
+        const i = setInterval(atualizar, 5000);
+        // internet que volta ou a pessoa que volta para o aplicativo: atualiza na hora
+        const agora = () => { if (document.visibilityState === 'visible') atualizar(); };
+        window.addEventListener('online', agora);
+        document.addEventListener('visibilitychange', agora);
+        return () => { clearInterval(i); window.removeEventListener('online', agora); document.removeEventListener('visibilitychange', agora); };
+    }, [token, atualizar]);
 
     const entrar = async (ev: React.FormEvent) => {
         ev.preventDefault();
@@ -105,6 +114,20 @@ export const MotoboyPage: React.FC = () => {
 
     const caixa = 'rounded-xl border border-gray-300 bg-white p-3 shadow-sm space-y-2';
     const botao = 'rounded-lg px-4 py-2.5 text-sm font-bold disabled:opacity-50 active:scale-95';
+
+    // Ja entrou mas o painel ainda nao chegou (carregando ou sem internet): nao volta para a tela de senha.
+    if (token && !painel) {
+        return (
+            <div className="min-h-screen bg-[#F3F3F1] flex items-center justify-center p-6 text-center" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+                <div className="space-y-3">
+                    <p className="text-lg font-bold text-[#1A1A1A]">Carregando suas entregas...</p>
+                    {erro && <p className="text-sm text-gray-600">{erro} Assim que a internet voltar, atualiza sozinho.</p>}
+                    <button onClick={atualizar} className="rounded-lg bg-[#F26B1D] px-4 py-2 text-sm font-bold text-[#1F1F1F]">Tentar agora</button>
+                    <button onClick={sair} className="block w-full text-sm text-gray-500 underline">Sair</button>
+                </div>
+            </div>
+        );
+    }
 
     if (!token || !painel) {
         return (

@@ -4,6 +4,7 @@ import {
     fetchContagemDeCardapio, fetchPedidosDaPlataforma, type PedidoDaPlataforma, type SinalDeVidaDaLoja,
 } from '../../services/supabaseService';
 import type { Store, LojaFinanceiro, PadroesPlataforma } from '../../types';
+import { comTempo } from '../../utils/comTempo';
 
 export interface DadosDaPlataforma {
     stores: Store[];
@@ -16,6 +17,8 @@ export interface DadosDaPlataforma {
     cardapio: Record<string, number>;
     stats: { totalStores: number; activeStores: number; lojasDeComissao: number; mrr: number };
     carregando: boolean;
+    /** Mensagem quando a carga falhou (sem internet, por exemplo). Vazio = tudo certo. */
+    erroDeCarga: string;
     agora: number;
     recarregar: () => Promise<void>;
     recarregarSinais: () => Promise<void>;
@@ -44,14 +47,16 @@ export const PlataformaProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const [cardapio, setCardapio] = useState<Record<string, number>>({});
     const [stats, setStats] = useState({ totalStores: 0, activeStores: 0, lojasDeComissao: 0, mrr: 0 });
     const [carregando, setCarregando] = useState(true);
+    const [erroDeCarga, setErroDeCarga] = useState('');
     const [agora, setAgora] = useState(Date.now());
 
     const recarregar = useCallback(async () => {
         try {
-            const [lojas, estat, fins, pad, vidas, itens, ped] = await Promise.all([
+            const [lojas, estat, fins, pad, vidas, itens, ped] = await comTempo(Promise.all([
                 fetchAllStores(), getGlobalStats(), fetchFinanceiroDeTodas(), fetchPadroesPlataforma(), fetchSinaisDeVida(), fetchContagemDeCardapio(),
                 fetchPedidosDaPlataforma(new Date(Date.now() - TRINTA_DIAS).toISOString()).catch(() => ({ pedidos: [] as PedidoDaPlataforma[], cortado: false })),
-            ]);
+            ]), 20000, 'carga demorou');
+            setErroDeCarga('');
             setStores(lojas); setStats(estat);
             setFinanceiros(Object.fromEntries(fins.map(f => [f.store_id, f])));
             setPadroes(pad); setSinais(vidas); setCardapio(itens);
@@ -59,7 +64,7 @@ export const PlataformaProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setAgora(Date.now());
         } catch (e) {
             console.error('[central] erro ao carregar dados:', e);
-            alert('Erro ao carregar os dados da plataforma.');
+            setErroDeCarga('Não foi possível carregar os dados agora (sem internet ou conexão lenta).');
         } finally {
             setCarregando(false);
         }
@@ -68,11 +73,21 @@ export const PlataformaProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const recarregarSinais = useCallback(async () => { setSinais(await fetchSinaisDeVida()); setAgora(Date.now()); }, []);
 
     useEffect(() => { recarregar(); }, [recarregar]);
+    // Se a carga falhou, tenta de novo quando a internet volta ou quando a pessoa volta para a aba.
+    useEffect(() => {
+        if (!erroDeCarga) return;
+        const tentar = () => { setCarregando(true); recarregar(); };
+        const aoVoltarAba = () => { if (document.visibilityState === 'visible') tentar(); };
+        window.addEventListener('online', tentar);
+        document.addEventListener('visibilitychange', aoVoltarAba);
+        const t = setInterval(tentar, 20000);
+        return () => { window.removeEventListener('online', tentar); document.removeEventListener('visibilitychange', aoVoltarAba); clearInterval(t); };
+    }, [erroDeCarga, recarregar]);
 
     const valor = useMemo<DadosDaPlataforma>(() => ({
-        stores, financeiros, padroes, sinais, pedidos, pedidosCortados, cardapio, stats, carregando, agora, recarregar, recarregarSinais,
+        stores, financeiros, padroes, sinais, pedidos, pedidosCortados, cardapio, stats, carregando, erroDeCarga, agora, recarregar, recarregarSinais,
         lojaPorId: (id: string) => stores.find(s => s.id === id),
-    }), [stores, financeiros, padroes, sinais, pedidos, pedidosCortados, cardapio, stats, carregando, agora, recarregar, recarregarSinais]);
+    }), [stores, financeiros, padroes, sinais, pedidos, pedidosCortados, cardapio, stats, carregando, erroDeCarga, agora, recarregar, recarregarSinais]);
 
     return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 };

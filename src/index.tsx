@@ -6,6 +6,17 @@ import './index.css';
 import 'intro.js/introjs.css'; // Base styles (REQUIRED)
 import 'intro.js/themes/introjs-modern.css'; // Modern Theme
 import { registerPWA } from './pwa';
+
+// Depois de uma atualizacao do site, um celular com a versao antiga guardada pode pedir um pedaco do aplicativo que nao existe
+// mais: a tela ficaria em "Carregando..." para sempre. Nesse caso a pagina se recarrega sozinha (so uma vez por minuto, para nao entrar em ciclo).
+window.addEventListener('vite:preloadError', () => {
+    try {
+        const ultimo = Number(sessionStorage.getItem('pedeaki_recarregou_em') || 0);
+        if (Date.now() - ultimo < 60000) return;
+        sessionStorage.setItem('pedeaki_recarregou_em', String(Date.now()));
+    } catch { /* sem armazenamento: recarrega mesmo assim */ }
+    window.location.reload();
+});
 import { carregarConfigEstacao, dumpConfigEstacao } from './services/estacaoService';
 
 // Configuracao de impressao/som DESTA maquina (salao / cozinha).

@@ -30,8 +30,17 @@ const classe = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors ${isActive ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`;
 
 const Corpo: React.FC = () => {
-    const { carregando } = usePlataforma();
-    if (carregando) return <div className="text-gray-400">Carregando...</div>;
+    const { carregando, erroDeCarga, recarregar } = usePlataforma();
+    if (carregando && !erroDeCarga) return <div className="text-gray-400">Carregando...</div>;
+    if (erroDeCarga) {
+        return (
+            <div className="max-w-md space-y-3 rounded-xl border border-gray-700 bg-gray-800 p-6 text-center mx-auto mt-10">
+                <p className="text-lg font-bold text-white">Sem conexão</p>
+                <p className="text-sm text-gray-300">{erroDeCarga} Quando a internet voltar, esta tela tenta de novo sozinha.</p>
+                <button onClick={() => recarregar()} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500">Tentar de novo agora</button>
+            </div>
+        );
+    }
     return (
         <Routes>
             <Route index element={<VisaoGeralSecao />} />

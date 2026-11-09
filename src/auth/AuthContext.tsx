@@ -1,3 +1,4 @@
+import { comTempo } from '../utils/comTempo';
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../services/supabaseService';
@@ -38,17 +39,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await supabase.auth.setSession({ access_token: access, refresh_token: refresh }).catch(() => {});
         window.history.replaceState(null, '', window.location.pathname + window.location.search);
       }
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setLoading(false);
+      // Sem internet, ler a sessao pode ficar pendurado (o token vencido tenta renovar pela rede). Com limite de tempo a tela
+      // sai do "Carregando", e quando a internet volta a sessao e lida de novo.
+      try {
+        const { data: { session } } = await comTempo(supabase.auth.getSession(), 8000, 'sessao demorou');
+        setSession(session);
+      } catch (e) {
+        console.warn('[auth] nao foi possivel ler a sessao agora:', e);
+      } finally {
+        setLoading(false);
+      }
     };
     iniciar();
+    const aoVoltarInternet = () => { iniciar(); };
+    window.addEventListener('online', aoVoltarInternet);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); window.removeEventListener('online', aoVoltarInternet); };
   }, []);
 
   return <AuthContext.Provider value={{ session, loading }}>{children}</AuthContext.Provider>;

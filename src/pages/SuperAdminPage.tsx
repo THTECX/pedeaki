@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, isPlatformAdmin } from '../services/supabaseService';
 import { useAuth } from '../auth/AuthContext';
 import { CentralDeGestao } from './superadmin/CentralDeGestao';
+import { comTempo } from '../utils/comTempo';
 
 const Carregando = () => <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Carregando...</div>;
 
@@ -16,12 +17,21 @@ const SuperAdminPage: React.FC = () => {
     const [entrando, setEntrando] = useState(false);
     const [aviso, setAviso] = useState<string | null>(null);
 
+    const [tentativa, setTentativa] = useState(0);
     useEffect(() => {
         if (!session) { setAdmin(undefined); return; }
         let vivo = true;
-        isPlatformAdmin().then(v => { if (vivo) setAdmin(v); });
+        comTempo(isPlatformAdmin(), 10000, 'permissao demorou').then(v => { if (vivo) setAdmin(v); }).catch(() => { if (vivo) setAdmin(null); });
         return () => { vivo = false; };
-    }, [session?.user?.id]);
+    }, [session?.user?.id, tentativa]);
+    // Sem conexao a permissao nao pode ser confirmada: quando a internet volta (ou a pessoa volta para a aba) tenta de novo sozinho.
+    useEffect(() => {
+        const tentar = () => { if (admin === null) { setAdmin(undefined); setTentativa(t => t + 1); } };
+        const aoVoltarAba = () => { if (document.visibilityState === 'visible') tentar(); };
+        window.addEventListener('online', tentar);
+        document.addEventListener('visibilitychange', aoVoltarAba);
+        return () => { window.removeEventListener('online', tentar); document.removeEventListener('visibilitychange', aoVoltarAba); };
+    }, [admin]);
 
     const entrar = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -64,8 +74,9 @@ const SuperAdminPage: React.FC = () => {
         return (
             <div className="min-h-screen bg-gray-900 flex items-center justify-center p-6">
                 <div className="max-w-md w-full bg-gray-800 border border-gray-700 rounded-2xl p-8 text-center space-y-4">
-                    <h1 className="text-2xl font-black text-white">Sem permissão</h1>
-                    <p className="text-gray-300">{admin === null ? 'Não foi possível confirmar sua permissão (sem conexão?).' : 'Este login não é administrador da plataforma.'}</p>
+                    <h1 className="text-2xl font-black text-white">{admin === null ? 'Sem conexão' : 'Sem permissão'}</h1>
+                    <p className="text-gray-300">{admin === null ? 'Não foi possível confirmar sua permissão. Quando a internet voltar, esta tela tenta de novo sozinha.' : 'Este login não é administrador da plataforma.'}</p>
+                    {admin === null && <button onClick={() => { setAdmin(undefined); setTentativa(t => t + 1); }} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 py-2 rounded-lg mr-2">Tentar de novo</button>}
                     <button onClick={() => supabase.auth.signOut()} className="bg-gray-700 hover:bg-gray-600 text-white font-bold px-5 py-2 rounded-lg">Sair</button>
                 </div>
             </div>
