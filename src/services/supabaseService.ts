@@ -2347,20 +2347,23 @@ export const ownsStore = async (storeId: string): Promise<boolean | null> => {
 export interface LojaShopping {
     id: string; name: string; slug: string; logo_url?: string | null;
     categoria?: string | null; cidade?: string | null; subscription_end_date?: string | null;
+    /** Impulsionamento pago (SQL 19). Ausente se o SQL ainda nao rodou. */
+    impulso?: 'nenhum' | 'patrocinada' | 'destaque'; impulso_ate?: string | null;
 }
+/** Impulso vale so se a data de termino ainda nao passou. */
+export const impulsoAtivo = (l: LojaShopping): 'patrocinada' | 'destaque' | null =>
+    (l.impulso === 'patrocinada' || l.impulso === 'destaque') && l.impulso_ate && new Date(l.impulso_ate).getTime() > Date.now() ? l.impulso : null;
 export interface ProdutoBusca { id: string | number; name: string; price: number; image?: string | null; store_id: string }
 
 /** Lojas ativas, não vencidas e que marcaram "aparecer no shopping". */
 export const fetchLojasShopping = async (): Promise<LojaShopping[]> => {
-    const { data, error } = await supabase
-        .from('stores')
-        .select('id,name,slug,logo_url,categoria,cidade,subscription_end_date')
-        .eq('aparecer_no_shopping', true)
-        .eq('is_active', true)
-        .order('name');
+    const buscar = (colunas: string) => supabase.from('stores').select(colunas).eq('aparecer_no_shopping', true).eq('is_active', true).order('name');
+    let { data, error } = await buscar('id,name,slug,logo_url,categoria,cidade,subscription_end_date,impulso,impulso_ate');
+    // SQL 19 ainda nao rodou: busca sem as colunas de impulso (nenhuma loja aparece como impulsionada).
+    if (error) ({ data, error } = await buscar('id,name,slug,logo_url,categoria,cidade,subscription_end_date'));
     if (error) throw error;
     const agora = Date.now();
-    return ((data || []) as LojaShopping[]).filter(l => !l.subscription_end_date || new Date(l.subscription_end_date).getTime() > agora);
+    return ((data || []) as unknown as LojaShopping[]).filter(l => !l.subscription_end_date || new Date(l.subscription_end_date).getTime() > agora);
 };
 
 /** Horario e tempo tipico de entrega das lojas do shopping (SQL 15). Se a funcao ainda nao existe, devolve vazio e a vitrine segue sem esses dados. */

@@ -43,8 +43,8 @@ export const LojasSecao: React.FC = () => {
         categoria: '', cidade: '', aparecer_no_shopping: false, fin,
     });
     const [newStore, setNewStore] = useState(novoFormulario());
-    const [editForm, setEditForm] = useState<{ tipo: TipoDeLoja; plan_value: number; subscription_end_date: string; is_active: boolean; categoria: string; cidade: string; aparecer_no_shopping: boolean; aceita_dinheiro: boolean; pagamento_pix: boolean; pagamento_cartao: boolean; entrega_modo: 'propria' | 'app'; fin: FormFinanceiro }>({
-        tipo: 'pdv_avancado', plan_value: 0, subscription_end_date: '', is_active: true, categoria: '', cidade: '', aparecer_no_shopping: false, aceita_dinheiro: true, pagamento_pix: true, pagamento_cartao: false, entrega_modo: 'propria', fin: FIN_PADRAO,
+    const [editForm, setEditForm] = useState<{ tipo: TipoDeLoja; plan_value: number; subscription_end_date: string; is_active: boolean; categoria: string; cidade: string; aparecer_no_shopping: boolean; aceita_dinheiro: boolean; pagamento_pix: boolean; pagamento_cartao: boolean; entrega_modo: 'propria' | 'app'; impulso: 'nenhum' | 'patrocinada' | 'destaque'; impulso_ate: string; fin: FormFinanceiro }>({
+        tipo: 'pdv_avancado', plan_value: 0, subscription_end_date: '', is_active: true, categoria: '', cidade: '', aparecer_no_shopping: false, aceita_dinheiro: true, pagamento_pix: true, pagamento_cartao: false, entrega_modo: 'propria', impulso: 'nenhum', impulso_ate: '', fin: FIN_PADRAO,
     });
 
     const handleCreateStore = async () => {
@@ -97,6 +97,7 @@ export const LojasSecao: React.FC = () => {
     const handleUpdateStore = async () => {
         if (!editingStore) return;
         const comissao = editForm.tipo === 'comissao';
+        if (editingStore.impulso !== undefined && editForm.impulso !== 'nenhum' && !editForm.impulso_ate) return alert('Informe até quando vai o impulsionamento.');
         try {
             await updateStoreSubscription(editingStore.id, {
                 modelo: comissao ? 'comissao' : 'pdv',
@@ -109,6 +110,8 @@ export const LojasSecao: React.FC = () => {
                 aceita_dinheiro: comissao ? editForm.aceita_dinheiro : true,
                 // controles do SQL 17: so vao se a coluna ja existe (a loja carregada traz o campo)
                 ...(comissao && editingStore.entrega_modo !== undefined ? { pagamento_pix: editForm.pagamento_pix, pagamento_cartao: editForm.pagamento_cartao, entrega_modo: editForm.entrega_modo } : {}),
+                // impulsionamento (SQL 19): so vai se a coluna ja existe (a loja carregada traz o campo)
+                ...(editingStore.impulso !== undefined ? { impulso: editForm.impulso, impulso_ate: editForm.impulso === 'nenhum' || !editForm.impulso_ate ? null : new Date(editForm.impulso_ate + 'T23:59:59').toISOString() } : {}),
                 subscription_end_date: comissao ? null : (editForm.subscription_end_date ? new Date(editForm.subscription_end_date + 'T23:59:59').toISOString() : null),
             });
             if (comissao) await salvarFinanceiro(editingStore.id, editForm.fin);
@@ -135,6 +138,8 @@ export const LojasSecao: React.FC = () => {
             pagamento_pix: store.pagamento_pix ?? true,
             pagamento_cartao: store.pagamento_cartao ?? false,
             entrega_modo: store.entrega_modo ?? 'propria',
+            impulso: store.impulso ?? 'nenhum',
+            impulso_ate: store.impulso_ate ? new Date(store.impulso_ate).toISOString().split('T')[0] : '',
             fin: { ...finPadroes(), ...(financeiros[store.id] ? { ...financeiros[store.id] } : {}) } as FormFinanceiro,
         });
     };
@@ -372,6 +377,27 @@ export const LojasSecao: React.FC = () => {
                                 <input type="checkbox" checked={editForm.aparecer_no_shopping} onChange={e => setEditForm({ ...editForm, aparecer_no_shopping: e.target.checked })} className="h-4 w-4" />
                                 Aparecer no shopping (Pede Aki)
                             </label>
+                            <div className="rounded-lg border border-gray-700 p-3 space-y-2">
+                                <p className="text-sm font-bold text-orange-300">Impulsionamento na vitrine</p>
+                                {editingStore.impulso === undefined ? (
+                                    <p className="text-xs text-yellow-300">Rode o SQL 19 no Supabase para liberar o impulsionamento.</p>
+                                ) : (
+                                    <>
+                                        <select value={editForm.impulso} onChange={e => setEditForm({ ...editForm, impulso: e.target.value as 'nenhum' | 'patrocinada' | 'destaque' })} className={campoBase}>
+                                            <option value="nenhum">Sem impulso (padrão)</option>
+                                            <option value="patrocinada">Patrocinada (faixa de selos)</option>
+                                            <option value="destaque">Destaque (banner grande no topo)</option>
+                                        </select>
+                                        {editForm.impulso !== 'nenhum' && (
+                                            <div>
+                                                <label className="block text-xs text-gray-400 mb-1">Vale até (último dia)</label>
+                                                <input type="date" value={editForm.impulso_ate} onChange={e => setEditForm({ ...editForm, impulso_ate: e.target.value })} className={campoBase} />
+                                            </div>
+                                        )}
+                                        <p className="text-xs text-gray-400">Passada a data, a loja volta sozinha ao normal. Só aparece impulsionada se também estiver marcada para aparecer no shopping.</p>
+                                    </>
+                                )}
+                            </div>
                             <div className="flex items-center space-x-3 bg-gray-700 p-3 rounded-lg">
                                 <input type="checkbox" id="isActive" checked={editForm.is_active} onChange={e => setEditForm({ ...editForm, is_active: e.target.checked })} className="h-5 w-5 rounded text-blue-500 bg-gray-600 border-gray-500 focus:ring-blue-500" />
                                 <label htmlFor="isActive" className="text-white font-medium cursor-pointer">Loja Ativa</label>

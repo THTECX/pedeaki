@@ -27,6 +27,9 @@ export interface Store {
   categoria?: string;
   cidade?: string;
   aparecer_no_shopping?: boolean;
+  /** Impulsionamento pago na vitrine (SQL 19). Só vale até impulso_ate. */
+  impulso?: 'nenhum' | 'patrocinada' | 'destaque';
+  impulso_ate?: string | null;
   plan_value?: number;
   is_active?: boolean;
   owner_email?: string;

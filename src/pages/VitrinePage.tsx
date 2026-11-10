@@ -4,7 +4,7 @@ import {
     MapPin, Search, UtensilsCrossed, Leaf, Pill, Tractor, Gift, PartyPopper,
     Plus, Home, ShoppingCart, User, ArrowRight, Megaphone,
 } from 'lucide-react';
-import { fetchLojasShopping, fetchInfoLojasShopping, type LojaShopping } from '../services/supabaseService';
+import { fetchLojasShopping, fetchInfoLojasShopping, impulsoAtivo, type LojaShopping } from '../services/supabaseService';
 import { statusDaLoja, type InfoLojaShopping } from '../utils/lojaAberta';
 import { InstalarApp } from '../components/InstalarApp';
 
@@ -26,13 +26,25 @@ const corte = (px: number): React.CSSProperties => ({
     clipPath: `polygon(${px}px 0%, calc(100% - ${px}px) 0%, 100% ${px}px, 100% calc(100% - ${px}px), calc(100% - ${px}px) 100%, ${px}px 100%, 0% calc(100% - ${px}px), 0% ${px}px)`,
 });
 
-const CATEGORIAS_EM_BREVE = [
+const CATEGORIAS = [
+    { nome: 'Comer', cor: '#FF6A1A', Icone: UtensilsCrossed },
     { nome: 'Hortifruti', cor: '#5FD068', Icone: Leaf },
     { nome: 'Farmácia', cor: '#2FC4B2', Icone: Pill },
     { nome: 'Agro', cor: '#A3D133', Icone: Tractor },
     { nome: 'Presentes', cor: '#F0649C', Icone: Gift },
     { nome: 'Eventos', cor: '#FF7A59', Icone: PartyPopper },
 ];
+
+/** Categoria do cadastro da loja (lista detalhada do Super Admin) -> grupo da vitrine. Sem categoria ou "Outros" cai em Comer. */
+const grupoDaCategoria = (cat?: string | null): string => {
+    const c = semAcento(cat || '');
+    if (c.includes('hortifruti')) return 'Hortifruti';
+    if (c.includes('farmacia')) return 'Farmácia';
+    if (c.includes('agro')) return 'Agro';
+    if (c.includes('present') || c.includes('flor')) return 'Presentes';
+    if (c.includes('evento')) return 'Eventos';
+    return 'Comer';
+};
 
 const Imagem: React.FC<{ loja: LojaShopping; className?: string }> = ({ loja, className = '' }) => {
     const [falhou, setFalhou] = useState(false);
@@ -55,6 +67,8 @@ const VitrinePage: React.FC = () => {
     const campo = useRef<HTMLInputElement>(null);
     const lista = useRef<HTMLElement>(null);
     const [pos, setPos] = useState(0);
+    // Categoria marcada (comeca em Comer; tocar de novo na marcada mostra tudo)
+    const [grupo, setGrupo] = useState<string | null>('Comer');
 
     // Fontes só desta página
     useEffect(() => {
@@ -71,38 +85,48 @@ const VitrinePage: React.FC = () => {
     }, []);
 
     const termo = semAcento(texto.trim());
+    // Busca por texto procura em todas as categorias; sem texto, vale a categoria marcada.
     const visiveis = useMemo(
-        () => (lojas || []).filter(l => !termo || semAcento(`${l.name} ${l.categoria || ''}`).includes(termo)),
-        [lojas, termo],
+        () => (lojas || []).filter(l => termo ? semAcento(`${l.name} ${l.categoria || ''}`).includes(termo) : (!grupo || grupoDaCategoria(l.categoria) === grupo)),
+        [lojas, termo, grupo],
     );
+    const contagem = useMemo(() => {
+        const m: Record<string, number> = {};
+        (lojas || []).forEach(l => { const g = grupoDaCategoria(l.categoria); m[g] = (m[g] || 0) + 1; });
+        return m;
+    }, [lojas]);
     const { abertas, fechadas } = useMemo(() => {
         const comStatus = visiveis.map(l => ({ l, st: statusDaLoja(infos[l.id]), info: infos[l.id] }));
         return { abertas: comStatus.filter(x => x.st.aberta !== false), fechadas: comStatus.filter(x => x.st.aberta === false) };
     }, [visiveis, infos]);
-    const destaques = useMemo(() => (lojas || []).slice(0, 2), [lojas]);
+    // So aparece como impulsionada a loja que o Super Admin marcou e cujo prazo nao venceu.
+    const destaques = useMemo(() => (lojas || []).filter(l => impulsoAtivo(l) === 'destaque'), [lojas]);
+    const patrocinadas = useMemo(() => (lojas || []).filter(l => impulsoAtivo(l) === 'patrocinada'), [lojas]);
+    // O banner do topo sempre tem o recado do app; lojas de destaque entram depois dele.
+    const totalSlides = 1 + destaques.length;
 
     // Rotação do banner: 5 s, para por 12 s quando o dedo toca
     const pausaAte = useRef(0);
     useEffect(() => {
         const el = faixa.current;
-        if (!el || destaques.length < 2) return;
+        if (!el || totalSlides < 2) return;
         if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
         const id = setInterval(() => {
             if (Date.now() < pausaAte.current) return;
             const filho = el.firstElementChild as HTMLElement | null;
             if (!filho) return;
             const passo = filho.offsetWidth + 12;
-            const prox = (Math.round(el.scrollLeft / passo) + 1) % destaques.length;
+            const prox = (Math.round(el.scrollLeft / passo) + 1) % totalSlides;
             el.scrollTo({ left: prox * passo, behavior: 'smooth' });
         }, 5000);
         return () => clearInterval(id);
-    }, [destaques.length]);
+    }, [totalSlides]);
 
     const aoRolar = () => {
         const el = faixa.current;
         const filho = el?.firstElementChild as HTMLElement | null;
         if (!el || !filho) return;
-        setPos(Math.min(destaques.length - 1, Math.round(el.scrollLeft / (filho.offsetWidth + 12))));
+        setPos(Math.min(totalSlides - 1, Math.round(el.scrollLeft / (filho.offsetWidth + 12))));
     };
 
     // Volta (POP) para a vitrine: devolve a rolagem de onde a pessoa saiu.
@@ -189,35 +213,46 @@ const VitrinePage: React.FC = () => {
                     <section className="flex flex-col gap-2.5">
                         {titulo('O QUE VOCÊ QUER HOJE?')}
                         <div className="grid grid-cols-6 gap-1.5 px-4">
-                            <button onClick={irParaLojas} style={{ ...corte(8), boxShadow: '0 0 12px -2px rgba(255,106,26,.4)' }}
-                                className="relative bg-[#1A171F] py-2 px-0.5 border border-[#FF6A1A] flex flex-col items-center gap-1 active:scale-[0.97]">
-                                <span className="absolute top-1 right-1.5 w-1 h-1 rounded-full bg-[#FF6A1A] animate-pulse" />
-                                <UtensilsCrossed size={18} className="text-[#FF6A1A]" />
-                                <span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[11px] tracking-wide uppercase leading-none">Comer</span>
-                                <span className="text-[7px] font-bold uppercase tracking-wide text-[#FF6A1A]">{lojas ? `${lojas.length} ${lojas.length === 1 ? 'loja' : 'lojas'}` : '...'}</span>
-                            </button>
-                            {CATEGORIAS_EM_BREVE.map(({ nome, cor, Icone }) => (
-                                <div key={nome} style={{ ...corte(8), borderColor: `${cor}73` }}
-                                    className="bg-[#2A2430] py-2 px-0.5 border flex flex-col items-center gap-1">
-                                    <Icone size={18} style={{ color: cor }} />
-                                    <span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[10px] tracking-normal uppercase leading-none">{nome}</span>
-                                    <span className="text-[7px] font-bold uppercase tracking-wide text-[#C9C1D1]">Em breve</span>
-                                </div>
-                            ))}
+                            {CATEGORIAS.map(({ nome, cor, Icone }) => {
+                                const qtd = contagem[nome] || 0;
+                                const marcada = grupo === nome;
+                                if (qtd === 0) return (
+                                    <div key={nome} style={{ ...corte(8), borderColor: `${cor}73` }}
+                                        className="bg-[#2A2430] py-2 px-0.5 border flex flex-col items-center gap-1">
+                                        <Icone size={18} style={{ color: cor }} />
+                                        <span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[10px] tracking-normal uppercase leading-none">{nome}</span>
+                                        <span className="text-[7px] font-bold uppercase tracking-wide text-[#C9C1D1]">Em breve</span>
+                                    </div>
+                                );
+                                return (
+                                    <button key={nome} onClick={() => { setGrupo(marcada ? null : nome); setTexto(''); irParaLojas(); }}
+                                        aria-pressed={marcada}
+                                        style={{ ...corte(8), borderColor: cor, ...(marcada ? { backgroundColor: cor, boxShadow: `0 0 14px -2px ${cor}` } : {}) }}
+                                        className={`py-2 px-0.5 border-2 flex flex-col items-center gap-1 active:scale-[0.97] ${marcada ? 'text-black' : 'bg-[#1A171F] text-[#F7EFE4] opacity-80'}`}>
+                                        <Icone size={18} style={marcada ? undefined : { color: cor }} />
+                                        <span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[10px] tracking-normal uppercase leading-none">{nome}</span>
+                                        <span className={`text-[7px] font-bold uppercase tracking-wide ${marcada ? 'text-black' : ''}`} style={marcada ? undefined : { color: cor }}>{qtd} {qtd === 1 ? 'loja' : 'lojas'}</span>
+                                    </button>
+                                );
+                            })}
                         </div>
                         <Link to="/cadastro" className="self-start px-4 text-[11px] font-bold uppercase tracking-wider text-[#C9C1D1] flex items-center gap-1">
                             <Plus size={14} className="text-[#FF6A1A]" />Falta uma categoria? Indique uma loja
                         </Link>
                     </section>
 
-                    {/* Em destaque, nível 1: banner rotativo */}
-                    {destaques.length > 0 && !termo && (
+                    {/* Banner do topo: recado do app + lojas de destaque (pagas, com prazo) */}
+                    {!termo && (
                         <section className="flex flex-col gap-2.5">
-                            {titulo('EM DESTAQUE')}
                             <div ref={faixa} onScroll={aoRolar}
                                 onTouchStart={() => { pausaAte.current = Date.now() + 12000; }}
                                 onWheel={() => { pausaAte.current = Date.now() + 12000; }}
                                 className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-4" style={{ scrollbarWidth: 'none' }}>
+                                <div style={corte(14)} className="snap-start shrink-0 w-[88%] bg-gradient-to-br from-[#FF6A1A] to-[#FF9A5A] text-black p-4 flex flex-col justify-between min-h-[128px]">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Pede Aki · {CIDADE_FIXA}</span>
+                                    <h3 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[26px] tracking-wide uppercase leading-[1.05]">Peça das lojas da sua cidade</h3>
+                                    <span className="text-[12px] font-bold">Comida, farmácia, agro e mais. Entrega na sua porta.</span>
+                                </div>
                                 {destaques.map(l => (
                                     <Link key={l.id} to={`/${l.slug}`} style={corte(14)}
                                         className="snap-start shrink-0 w-[88%] bg-[#F7EFE4] text-[#15121A] p-2 flex gap-2.5 border-2 border-[#F7EFE4]">
@@ -236,27 +271,25 @@ const VitrinePage: React.FC = () => {
                                     </Link>
                                 ))}
                             </div>
-                            {destaques.length > 1 && (
+                            {totalSlides > 1 && (
                                 <div className="flex justify-center gap-1.5">
-                                    {destaques.map((l, i) => <span key={l.id} className={`h-1 ${i === pos ? 'w-5 bg-[#FF6A1A]' : 'w-2 bg-[#3E3647]'}`} />)}
+                                    {Array.from({ length: totalSlides }).map((_, i) => <span key={i} className={`h-1 ${i === pos ? 'w-5 bg-[#FF6A1A]' : 'w-2 bg-[#3E3647]'}`} />)}
                                 </div>
                             )}
+                        </section>
+                    )}
 
-                            {/* nível 2: faixa de selos */}
-                            <span className="px-4 pt-1 text-[10px] font-bold uppercase tracking-widest text-[#CFC7D6]">Lojas patrocinadas</span>
+                    {/* Lojas patrocinadas (nível fraco): so aparece se alguma loja pagou e o prazo vale */}
+                    {patrocinadas.length > 0 && !termo && (
+                        <section className="flex flex-col gap-2">
+                            <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-[#CFC7D6]">Lojas patrocinadas</span>
                             <div className="flex gap-3 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-                                {destaques.map(l => (
+                                {patrocinadas.map(l => (
                                     <Link key={l.id} to={`/${l.slug}`} className="shrink-0 w-[68px] flex flex-col items-center gap-1 active:scale-[0.97]">
                                         <span style={corte(10)} className="block bg-[#FF6A1A] p-[2px]">
                                             <span style={corte(8)} className="block w-[64px] h-[64px] overflow-hidden bg-black"><Imagem loja={l} /></span>
                                         </span>
                                         <span className="text-[10px] font-bold leading-tight text-center">{l.name}</span>
-                                    </Link>
-                                ))}
-                                {[0, 1, 2].map(i => (
-                                    <Link key={i} to="/cadastro" className="shrink-0 w-[68px] flex flex-col items-center gap-1 active:scale-[0.97]">
-                                        <span style={corte(10)} className="flex items-center justify-center w-[68px] h-[68px] border border-dashed border-[#5A506A] text-[#FF6A1A] bg-[#1A171F]"><Plus size={24} /></span>
-                                        <span className="text-[10px] font-bold leading-tight text-center text-[#CFC7D6]">Sua loja aqui</span>
                                     </Link>
                                 ))}
                             </div>
@@ -265,7 +298,7 @@ const VitrinePage: React.FC = () => {
 
                     {/* Lojas abertas */}
                     <section ref={lista} className="flex flex-col gap-3.5 scroll-mt-28">
-                        {titulo(termo ? 'RESULTADO' : 'ABERTOS AGORA')}
+                        {titulo(termo ? 'RESULTADO' : grupo ? `${grupo} · abertos agora` : 'ABERTOS AGORA')}
                         <div className="flex flex-col gap-3.5 px-4">
                             {lojas === null && <p className="text-[13px] text-[#CFC7D6]">Carregando as lojas da cidade...</p>}
                             {lojas !== null && visiveis.length === 0 && (
