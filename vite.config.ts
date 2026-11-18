@@ -48,7 +48,7 @@ export default defineConfig(({ mode }) => ({
         globIgnores: ['**/*-legacy-*', '**/AdminPage-*', '**/SuperAdminPage-*', '**/CentralDeGestao-*'],
         maximumFileSizeToCacheInBytes: 1_500_000,
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/q\//],
         runtimeCaching: [
           {
             // código das telas (painel, super admin...) e navegadores antigos: guarda ao usar e atualiza em segundo plano

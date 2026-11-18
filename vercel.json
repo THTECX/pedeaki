@@ -1,6 +1,10 @@
 {
     "rewrites": [
         {
+            "source": "/q/:codigo",
+            "destination": "/api/q?c=:codigo"
+        },
+        {
             "source": "/assets/(.*)",
             "destination": "/assets/$1"
         },
