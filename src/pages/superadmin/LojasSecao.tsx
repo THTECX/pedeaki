@@ -385,8 +385,7 @@ export const LojasSecao: React.FC = () => {
                                     <>
                                         <select value={editForm.impulso} onChange={e => setEditForm({ ...editForm, impulso: e.target.value as 'nenhum' | 'patrocinada' | 'destaque' })} className={campoBase}>
                                             <option value="nenhum">Sem impulso (padrão)</option>
-                                            <option value="patrocinada">Patrocinada (faixa de selos)</option>
-                                            <option value="destaque">Destaque (banner grande no topo)</option>
+                                            <option value="patrocinada">Patrocinada (faixa abaixo das categorias)</option>
                                         </select>
                                         {editForm.impulso !== 'nenhum' && (
                                             <div>

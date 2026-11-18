@@ -5,6 +5,7 @@ import {
     Plus, Home, ShoppingCart, User, ArrowRight, Megaphone,
 } from 'lucide-react';
 import { fetchLojasShopping, fetchInfoLojasShopping, impulsoAtivo, type LojaShopping } from '../services/supabaseService';
+import { fetchImpulsoVagas, type ImpulsoVagas } from '../services/impulso';
 import { statusDaLoja, type InfoLojaShopping } from '../utils/lojaAberta';
 import { InstalarApp } from '../components/InstalarApp';
 
@@ -63,10 +64,9 @@ const VitrinePage: React.FC = () => {
     const tipoDeNavegacao = useNavigationType();
     const [texto, setTexto] = useState('');
     const [infos, setInfos] = useState<Record<string, InfoLojaShopping>>(cacheInfos);
-    const faixa = useRef<HTMLDivElement>(null);
     const campo = useRef<HTMLInputElement>(null);
     const lista = useRef<HTMLElement>(null);
-    const [pos, setPos] = useState(0);
+    const [vagasInfo, setVagasInfo] = useState<ImpulsoVagas | null>(null);
     // Categoria marcada (comeca em Comer; tocar de novo na marcada mostra tudo)
     const [grupo, setGrupo] = useState<string | null>('Comer');
 
@@ -80,6 +80,7 @@ const VitrinePage: React.FC = () => {
     }, []);
 
     useEffect(() => { fetchLojasShopping().then(l => { cacheLojas = l; setLojas(l); }).catch(() => setLojas(atual => atual ?? [])); }, []);
+    useEffect(() => { fetchImpulsoVagas().then(setVagasInfo).catch(() => setVagasInfo(null)); }, []);
     useEffect(() => {
         fetchInfoLojasShopping().then(lista => { const mapa = Object.fromEntries(lista.map(i => [i.store_id, i])); cacheInfos = mapa; setInfos(mapa); }).catch(() => { /* sem info: a vitrine mostra so o basico */ });
     }, []);
@@ -99,35 +100,10 @@ const VitrinePage: React.FC = () => {
         const comStatus = visiveis.map(l => ({ l, st: statusDaLoja(infos[l.id]), info: infos[l.id] }));
         return { abertas: comStatus.filter(x => x.st.aberta !== false), fechadas: comStatus.filter(x => x.st.aberta === false) };
     }, [visiveis, infos]);
-    // So aparece como impulsionada a loja que o Super Admin marcou e cujo prazo nao venceu.
-    const destaques = useMemo(() => (lojas || []).filter(l => impulsoAtivo(l) === 'destaque'), [lojas]);
-    const patrocinadas = useMemo(() => (lojas || []).filter(l => impulsoAtivo(l) === 'patrocinada'), [lojas]);
-    // O banner do topo sempre tem o recado do app; lojas de destaque entram depois dele.
-    const totalSlides = 1 + destaques.length;
-
-    // Rotação do banner: 5 s, para por 12 s quando o dedo toca
-    const pausaAte = useRef(0);
-    useEffect(() => {
-        const el = faixa.current;
-        if (!el || totalSlides < 2) return;
-        if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-        const id = setInterval(() => {
-            if (Date.now() < pausaAte.current) return;
-            const filho = el.firstElementChild as HTMLElement | null;
-            if (!filho) return;
-            const passo = filho.offsetWidth + 12;
-            const prox = (Math.round(el.scrollLeft / passo) + 1) % totalSlides;
-            el.scrollTo({ left: prox * passo, behavior: 'smooth' });
-        }, 5000);
-        return () => clearInterval(id);
-    }, [totalSlides]);
-
-    const aoRolar = () => {
-        const el = faixa.current;
-        const filho = el?.firstElementChild as HTMLElement | null;
-        if (!el || !filho) return;
-        setPos(Math.min(totalSlides - 1, Math.round(el.scrollLeft / (filho.offsetWidth + 12))));
-    };
+    // So aparece como patrocinada a loja que pagou (ou que o Super Admin marcou) e cujo prazo nao venceu.
+    const patrocinadas = useMemo(() => (lojas || []).filter(l => impulsoAtivo(l) !== null), [lojas]);
+    // Vagas vazias viram convite para o lojista impulsionar (so com o SQL 20 rodado e o impulso ligado).
+    const vazias = vagasInfo && vagasInfo.ativo ? Math.max(0, vagasInfo.vagas - patrocinadas.length) : 0;
 
     // Volta (POP) para a vitrine: devolve a rolagem de onde a pessoa saiu.
     const rolagemRestaurada = useRef(false);
@@ -241,57 +217,38 @@ const VitrinePage: React.FC = () => {
                         </Link>
                     </section>
 
-                    {/* Banner do topo: recado do app + lojas de destaque (pagas, com prazo) */}
-                    {!termo && (
-                        <section className="flex flex-col gap-2.5">
-                            <div ref={faixa} onScroll={aoRolar}
-                                onTouchStart={() => { pausaAte.current = Date.now() + 12000; }}
-                                onWheel={() => { pausaAte.current = Date.now() + 12000; }}
-                                className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-4" style={{ scrollbarWidth: 'none' }}>
-                                <div style={corte(14)} className="snap-start shrink-0 w-[88%] bg-gradient-to-br from-[#FF6A1A] to-[#FF9A5A] text-black p-4 flex flex-col justify-between min-h-[128px]">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest">Pede Aki · {CIDADE_FIXA}</span>
-                                    <h3 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[26px] tracking-wide uppercase leading-[1.05]">Peça das lojas da sua cidade</h3>
-                                    <span className="text-[12px] font-bold">Comida, farmácia, agro e mais. Entrega na sua porta.</span>
-                                </div>
-                                {destaques.map(l => (
-                                    <Link key={l.id} to={`/${l.slug}`} style={corte(14)}
-                                        className="snap-start shrink-0 w-[88%] bg-[#F7EFE4] text-[#15121A] p-2 flex gap-2.5 border-2 border-[#F7EFE4]">
-                                        <div style={corte(10)} className="relative w-[104px] h-[104px] shrink-0 overflow-hidden bg-black">
-                                            <Imagem loja={l} />
-                                            <span style={corte(4)} className="absolute top-1.5 left-1.5 px-1.5 py-0.5 bg-[#FF6A1A] text-black text-[8px] font-bold uppercase tracking-wider">Patrocinado</span>
-                                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#FF6A1A]" />
-                                        </div>
-                                        <div className="min-w-0 flex-1 flex flex-col justify-between py-0.5">
-                                            <div>
-                                                <h3 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[17px] tracking-wide uppercase leading-none truncate">{l.name}</h3>
-                                                <p className="text-[11px] text-[#6B6C72] mt-1">{[l.categoria, l.cidade].filter(Boolean).join(' • ')}</p>
-                                            </div>
-                                            <span style={{ ...corte(8), fontFamily: 'Anton, sans-serif' }} className="self-end px-3 py-1.5 bg-[#FF6A1A] text-black text-[13px] tracking-wider uppercase flex items-center gap-1">Ver cardápio <ArrowRight size={14} /></span>
-                                        </div>
+                    {/* Lojas patrocinadas: vagas pagas pelo lojista; vaga livre vira convite */}
+                    {(patrocinadas.length > 0 || vazias > 0) && !termo && (
+                        <section className="flex flex-col gap-2">
+                            <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-[#CFC7D6]">Lojas patrocinadas</span>
+                            <div className="flex gap-2.5 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+                                {patrocinadas.map(l => (
+                                    <Link key={l.id} to={`/${l.slug}`} className="shrink-0 w-[62px] flex flex-col items-center gap-1 active:scale-[0.97]">
+                                        <span style={corte(10)} className="block bg-[#FF6A1A] p-[2px]">
+                                            <span style={corte(8)} className="block w-[58px] h-[58px] overflow-hidden bg-black"><Imagem loja={l} /></span>
+                                        </span>
+                                        <span className="text-[10px] font-bold leading-tight text-center line-clamp-2">{l.name}</span>
+                                    </Link>
+                                ))}
+                                {Array.from({ length: vazias }).map((_, i) => (
+                                    <Link key={`v${i}`} to="/impulsionar" className="shrink-0 w-[62px] flex flex-col items-center gap-1 active:scale-[0.97]">
+                                        <span style={corte(10)} className="flex items-center justify-center w-[62px] h-[62px] border border-dashed border-[#FF6A1A]/70 text-[#FF6A1A] bg-[#1A171F]"><Plus size={22} /></span>
+                                        <span className="text-[9px] font-bold leading-tight text-center text-[#CFC7D6]">Impulsione sua loja</span>
                                     </Link>
                                 ))}
                             </div>
-                            {totalSlides > 1 && (
-                                <div className="flex justify-center gap-1.5">
-                                    {Array.from({ length: totalSlides }).map((_, i) => <span key={i} className={`h-1 ${i === pos ? 'w-5 bg-[#FF6A1A]' : 'w-2 bg-[#3E3647]'}`} />)}
-                                </div>
-                            )}
                         </section>
                     )}
 
-                    {/* Lojas patrocinadas (nível fraco): so aparece se alguma loja pagou e o prazo vale */}
-                    {patrocinadas.length > 0 && !termo && (
-                        <section className="flex flex-col gap-2">
-                            <span className="px-4 text-[10px] font-bold uppercase tracking-widest text-[#CFC7D6]">Lojas patrocinadas</span>
-                            <div className="flex gap-3 overflow-x-auto px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-                                {patrocinadas.map(l => (
-                                    <Link key={l.id} to={`/${l.slug}`} className="shrink-0 w-[68px] flex flex-col items-center gap-1 active:scale-[0.97]">
-                                        <span style={corte(10)} className="block bg-[#FF6A1A] p-[2px]">
-                                            <span style={corte(8)} className="block w-[64px] h-[64px] overflow-hidden bg-black"><Imagem loja={l} /></span>
-                                        </span>
-                                        <span className="text-[10px] font-bold leading-tight text-center">{l.name}</span>
-                                    </Link>
-                                ))}
+                    {/* Faixa do proprio app (baixa, para nao empurrar as lojas). Aqui entra depois o carrossel de propaganda. */}
+                    {!termo && (
+                        <section className="px-4">
+                            <div style={corte(10)} className="bg-gradient-to-r from-[#FF6A1A] to-[#FF9A5A] text-black px-4 py-3 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p style={{ fontFamily: 'Anton, sans-serif' }} className="text-[18px] tracking-wide uppercase leading-none">Peça das lojas da sua cidade</p>
+                                    <p className="text-[11px] font-bold mt-1 leading-tight">Comida, farmácia, agro e mais, na sua porta.</p>
+                                </div>
+                                <MapPin size={26} className="shrink-0" />
                             </div>
                         </section>
                     )}

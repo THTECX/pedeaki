@@ -30,7 +30,12 @@ export async function tratar({ tokenRecebido, corpo, env, buscar }) {
     }
 
     let resultado = 'registrado';
-    if (PAGO.has(evento.event) && pagamento.id && orderId) {
+    if (PAGO.has(evento.event) && pagamento.id && orderId && orderId.startsWith('impulso:')) {
+        // Impulso da vitrine comprado pelo lojista: liga o impulso (soma dias se ja tinha). Sem vaga depois dos 15 minutos = devolve o valor.
+        const r = await sup('/rest/v1/rpc/impulso_ativar', { method: 'POST', body: JSON.stringify({ p_id: orderId.slice(8), p_payment: pagamento.id }) });
+        resultado = r;
+        if (r === 'estornar') await asaas(`/payments/${pagamento.id}/refund`, 'POST', { description: 'Vagas de impulso esgotadas antes do pagamento' });
+    } else if (PAGO.has(evento.event) && pagamento.id && orderId) {
         const r = await sup('/rest/v1/rpc/pedido_pago', { method: 'POST', body: JSON.stringify({ p_order: orderId, p_payment: pagamento.id }) });
         resultado = r;
         if (r === 'estornar') await asaas(`/payments/${pagamento.id}/refund`, 'POST', { description: 'Pedido expirado ou cancelado antes do pagamento' });

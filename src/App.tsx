@@ -19,6 +19,7 @@ const ShoppingHomePage = lazy(() => import('./pages/ShoppingHomePage'));
 const VitrinePage = lazy(() => import('./pages/VitrinePage'));
 const PerfilPage = lazy(() => import('./pages/PerfilPage'));
 const MotoboyPage = lazy(() => import('./pages/MotoboyPage'));
+const ImpulsionarPage = lazy(() => import('./pages/ImpulsionarPage'));
 const NovaSenhaPage = lazy(() => import('./pages/NovaSenhaPage'));
 const TermosPage = lazy(() => import('./pages/TermosPage'));
 const PrivacidadePage = lazy(() => import('./pages/PrivacidadePage'));
@@ -204,6 +205,7 @@ const App: React.FC = () => {
                 <Route path="/vitrine" element={<VitrinePage />} />
                 <Route path="/perfil" element={<PerfilPage />} />
                 <Route path="/motoboy" element={<MotoboyPage />} />
+                <Route path="/impulsionar" element={<ImpulsionarPage />} />
                 <Route path="/redefinir_senha" element={<NovaSenhaPage />} />
                 <Route path="/entrar" element={<LoginPage />} />
                 <Route path="/termos" element={<TermosPage />} />

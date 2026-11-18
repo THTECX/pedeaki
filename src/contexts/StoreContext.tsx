@@ -67,7 +67,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // Link por loja: /<slug>, /<slug>/admin... A rota global (/admin, /login, /super-admin...)
         // não é loja. O caminho vale mais que o subdomínio e que o padrão do Electron/localhost.
-        const rotasGlobais = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'vitrine', 'perfil', 'motoboy', 'redefinir_senha', 'termos', 'privacidade', 'entrar'];
+        const rotasGlobais = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'vitrine', 'perfil', 'motoboy', 'impulsionar', 'redefinir_senha', 'termos', 'privacidade', 'entrar'];
         const primeiroSegmento = location.pathname.split('/').filter(Boolean)[0]?.toLowerCase();
         if (primeiroSegmento && !rotasGlobais.includes(primeiroSegmento)) {
             slug = primeiroSegmento;

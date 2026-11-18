@@ -27,6 +27,7 @@ import {
     MapPin,
     Keyboard,
     RefreshCw,
+    Megaphone,
     FileText as FileTextIcon
 } from 'lucide-react';
 import { normalizeString } from '../utils/searchUtils';
@@ -1930,6 +1931,11 @@ const AdminPage = () => {
                         <button onClick={() => setActiveTab('comandos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'comandos' ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                         <Keyboard size={20} /> Comandos <span className="ml-auto text-[10px] font-mono opacity-50">F6</span>
                     </button>
+                    )}
+                    {currentStore.modelo === 'comissao' && (
+                        <button onClick={() => navigate('/impulsionar')} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <Megaphone size={20} /> Impulsionar loja
+                        </button>
                     )}
                     {temRecurso(currentStore, 'motoboys') && (
                         <button onClick={() => navigate(`/${currentStore.slug}/entregador`)} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700">

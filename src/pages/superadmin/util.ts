@@ -56,7 +56,7 @@ export const DICAS_POR_CATEGORIA: Record<string, string[]> = {
 };
 
 // Endereços que já são rotas do app: não podem virar link de loja.
-export const SLUGS_RESERVADOS = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'redefinir_senha', 'assets', 'public'];
+export const SLUGS_RESERVADOS = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'vitrine', 'perfil', 'motoboy', 'impulsionar', 'entrar', 'termos', 'privacidade', 'redefinir_senha', 'assets', 'public'];
 
 export const limparSlug = (texto: string) =>
     texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
