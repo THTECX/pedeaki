@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Phone, MessageCircle, Clock, Volume2, X } from 'lucide-react';
 import type { Order } from '../types';
 import { testarSirene, VOLUME_PADRAO } from '../services/sireneService';
@@ -14,6 +14,12 @@ import { useStore } from '../contexts/StoreContext';
  * o mesmo do painel (sireneService), e aqui só há o botão que libera o som no celular.
  */
 type Status = Order['status'];
+
+/** Dados extras do pedido vindos do banco (funcao lojista_pedidos_extra): quando pagou e como esta a entrega do Pede Aki. */
+export interface PedidoExtra { order_id: string; pago_em?: string | null; aceito_em?: string | null; entrega?: string | null; motoboy?: string | null; disponivel_em?: string | null; pronta_em?: string | null }
+const LIMITE_ACEITE_MIN = 15;   // a loja tem 15 minutos para responder (depois o pedido e cancelado e devolvido)
+const ESPERA_EU_ENTREGO_MIN = 5; // sem motoboy em 5 minutos, a loja pode entregar por conta propria
+const ARRASTO_MIN = 110;         // px para o arrastar valer
 
 const MOTIVOS = [
     'Cliente pediu para cancelar',
@@ -54,10 +60,18 @@ interface Props {
     pedidos: Order[];
     onAvancar: (pedido: Order, novoStatus: Status) => void;
     onCancelar: (pedido: Order, motivo: string) => void;
+    extras?: Record<string, PedidoExtra>;
+    onPronto?: (pedido: Order) => void;
+    onEuEntrego?: (pedido: Order) => void;
 }
 
-export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar }) => {
+export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar, extras = {}, onPronto, onEuEntrego }) => {
     const [, setTick] = useState(0);
+    const [recusando, setRecusando] = useState<Order | null>(null);
+    const [recusaOutro, setRecusaOutro] = useState(false);
+    const [recusaTexto, setRecusaTexto] = useState('');
+    const arrasto = useRef<{ id: string; x0: number; y0: number; ativo: boolean } | null>(null);
+    const [dx, setDx] = useState<{ id: string; v: number } | null>(null);
     const [cancelando, setCancelando] = useState<Order | null>(null);
     const [motivo, setMotivo] = useState(MOTIVOS[0]);
     const [detalhe, setDetalhe] = useState('');
@@ -76,7 +90,7 @@ export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar
 
     // Os minutos de espera de cada pedido andam sozinhos.
     useEffect(() => {
-        const t = setInterval(() => setTick(x => x + 1), 30000);
+        const t = setInterval(() => setTick(x => x + 1), 15000);
         return () => clearInterval(t);
     }, []);
 
@@ -91,6 +105,28 @@ export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar
     });
 
     const instalado = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone === true);
+
+    const recusar = (o: Order, motivoRecusa: string) => {
+        onCancelar(o, motivoRecusa);
+        setRecusando(null); setRecusaOutro(false); setRecusaTexto('');
+    };
+    const sobreArrasto = {
+        inicio: (e: React.PointerEvent, o: Order) => { arrasto.current = { id: String(o.id), x0: e.clientX, y0: e.clientY, ativo: false }; },
+        mover: (e: React.PointerEvent, o: Order) => {
+            const a = arrasto.current; if (!a || a.id !== String(o.id)) return;
+            const ddx = e.clientX - a.x0, ddy = e.clientY - a.y0;
+            if (!a.ativo) { if (Math.abs(ddx) > 14 && Math.abs(ddx) > Math.abs(ddy) * 1.5) { a.ativo = true; (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); } else return; }
+            setDx({ id: a.id, v: Math.max(-220, Math.min(220, ddx)) });
+        },
+        fim: (o: Order) => {
+            const a = arrasto.current; arrasto.current = null;
+            const v = dx && dx.id === String(o.id) ? dx.v : 0;
+            setDx(null);
+            if (!a?.ativo) return;
+            if (v >= ARRASTO_MIN) onAvancar(o, 'Em Produção');
+            else if (v <= -ARRASTO_MIN) { setRecusando(o); setRecusaOutro(false); setRecusaTexto(''); }
+        },
+    };
 
     const confirmarCancelamento = () => {
         if (!cancelando) return;
@@ -136,19 +172,34 @@ export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar
             ) : (
                 <div className="space-y-4">
                     {lista.map(o => {
-                        const passo = proximoPasso(o);
+                        const ext = extras[String(o.id)];
+                        const entregaApp = ext?.entrega && ext.entrega !== 'cancelada' ? ext.entrega : null; // entrega pelo motoboy do Pede Aki em andamento
+                        const novo = o.status === 'Novo';
+                        const passoBase = proximoPasso(o);
+                        // Entrega do Pede Aki: a loja nao manda "saiu para entrega" (quem coleta e o motoboy); ela clica Pronto
+                        const passo = entregaApp ? null : passoBase;
                         const espera = minutosDesde(o.timestamp);
-                        const urgente = o.status === 'Novo' && espera >= 5;
+                        const baseResposta = ext?.pago_em || o.timestamp;
+                        const restaResposta = novo && baseResposta ? Math.max(0, LIMITE_ACEITE_MIN - minutosDesde(baseResposta)) : null;
+                        const urgente = novo && (restaResposta !== null ? restaResposta <= 5 : espera >= 5);
+                        const esperaMotoboy = entregaApp === 'disponivel' && ext?.disponivel_em ? minutosDesde(ext.disponivel_em) : 0;
+                        const arrastando = dx && dx.id === String(o.id) ? dx.v : 0;
                         const fone = String(o.phone || '').replace(/\D/g, '');
                         return (
-                            <article key={o.id} className={`rounded-2xl bg-white dark:bg-gray-800 shadow border-2 ${o.status === 'Novo' ? 'border-red-500' : 'border-transparent'} overflow-hidden`}>
+                            <article key={o.id}
+                                onPointerDown={novo ? e => sobreArrasto.inicio(e, o) : undefined}
+                                onPointerMove={novo ? e => sobreArrasto.mover(e, o) : undefined}
+                                onPointerUp={novo ? () => sobreArrasto.fim(o) : undefined}
+                                onPointerCancel={novo ? () => { arrasto.current = null; setDx(null); } : undefined}
+                                style={novo ? { transform: arrastando ? `translateX(${arrastando}px)` : undefined, touchAction: 'pan-y', transition: arrastando ? 'none' : 'transform .2s' } : undefined}
+                                className={`rounded-2xl shadow border-2 overflow-hidden ${arrastando > 0 ? 'bg-green-50' : arrastando < 0 ? 'bg-red-50' : 'bg-white dark:bg-gray-800'} ${novo ? 'border-red-500' : 'border-transparent'}`}>
                                 <header className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50">
                                     <div>
                                         <p className="text-lg font-black text-gray-900 dark:text-gray-100">Pedido #{o.dailyOrderNumber || '-'}</p>
                                         <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{o.status} · {ehEntrega(o) ? 'Entrega' : 'Retirada'}</p>
                                     </div>
                                     <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${urgente ? 'bg-red-600 text-white animate-pulse' : 'bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-100'}`}>
-                                        <Clock size={14} /> {espera} min
+                                        <Clock size={14} /> {restaResposta !== null ? `responda em ${restaResposta} min` : `${espera} min`}
                                     </span>
                                 </header>
 
@@ -186,15 +237,54 @@ export const PedidosCelular: React.FC<Props> = ({ pedidos, onAvancar, onCancelar
                                     </div>
                                 </div>
 
-                                <footer className="px-4 pb-4 flex gap-2">
-                                    {passo && (
-                                        <button onClick={() => onAvancar(o, passo.status)} className="flex-1 rounded-xl bg-green-600 active:bg-green-700 text-white font-black text-base py-4">{passo.rotulo}</button>
-                                    )}
-                                    <button onClick={() => setCancelando(o)} className="rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-bold text-sm px-4 py-4">{o.status === 'Novo' ? 'Recusar' : 'Cancelar'}</button>
+                                <footer className="px-4 pb-4 space-y-2">
+                                    {novo && <p className="text-center text-[11px] text-gray-500 dark:text-gray-400">Arraste o pedido para a direita para aceitar ou para a esquerda para recusar.</p>}
+                                    {entregaApp === 'efetivada' && <p className="rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-xs text-blue-900 dark:text-blue-200">Entrega pelo motoboy do Pede Aki. Quando o pedido estiver pronto, toque em Pronto: o motoboy é avisado para coletar.</p>}
+                                    {entregaApp === 'aceita' && !ext?.pronta_em && <p className="rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-xs text-blue-900 dark:text-blue-200">{ext?.motoboy || 'Um motoboy'} aceitou a entrega e está a caminho. Quando o pedido estiver pronto, toque em Pronto.</p>}
+                                    {entregaApp === 'aceita' && ext?.pronta_em && <p className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">Pedido pronto. Aguardando {ext?.motoboy || 'o motoboy'} coletar.</p>}
+                                    {entregaApp === 'disponivel' && <p className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">Pedido na fila de coleta. Aguardando um motoboy aceitar{esperaMotoboy > 0 ? ` (${esperaMotoboy} min)` : ''}.</p>}
+                                    {entregaApp === 'retirada' && <p className="rounded-lg bg-green-50 dark:bg-green-900/20 px-3 py-2 text-xs text-green-900 dark:text-green-200">Coletado{ext?.motoboy ? ` por ${ext.motoboy}` : ''}. A entrega segue com o motoboy.</p>}
+                                    <div className="flex gap-2">
+                                        {novo && (
+                                            <button onClick={() => onAvancar(o, 'Em Produção')} className="flex-1 rounded-xl bg-green-600 active:bg-green-700 text-white font-black text-base py-4">Aceitar pedido</button>
+                                        )}
+                                        {!novo && passo && (
+                                            <button onClick={() => onAvancar(o, passo.status)} className="flex-1 rounded-xl bg-green-600 active:bg-green-700 text-white font-black text-base py-4">{passo.rotulo}</button>
+                                        )}
+                                        {!novo && (entregaApp === 'efetivada' || (entregaApp === 'aceita' && !ext?.pronta_em)) && onPronto && (
+                                            <button onClick={() => onPronto(o)} className="flex-1 rounded-xl bg-green-600 active:bg-green-700 text-white font-black text-base py-4">Pronto para coleta</button>
+                                        )}
+                                        {!novo && entregaApp === 'disponivel' && esperaMotoboy >= ESPERA_EU_ENTREGO_MIN && onEuEntrego && (
+                                            <button onClick={() => onEuEntrego(o)} className="flex-1 rounded-xl bg-amber-500 active:bg-amber-600 text-slate-950 font-black text-base py-4">Eu mesmo entrego</button>
+                                        )}
+                                        {entregaApp !== 'retirada' && (
+                                            <button onClick={() => { if (novo) { setRecusando(o); setRecusaOutro(false); setRecusaTexto(''); } else setCancelando(o); }} className="rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-bold text-sm px-4 py-4">{novo ? 'Recusar' : 'Cancelar'}</button>
+                                        )}
+                                    </div>
                                 </footer>
                             </article>
                         );
                     })}
+                </div>
+            )}
+
+            {recusando && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setRecusando(null)}>
+                    <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl bg-white dark:bg-gray-800 p-5 space-y-3" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-black text-gray-900 dark:text-gray-100">Recusar o pedido #{recusando.dailyOrderNumber || ''}?</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300">O cliente é avisado e o dinheiro volta para ele. Por que está recusando?</p>
+                        <button onClick={() => recusar(recusando, 'Sem produto')} className="w-full rounded-xl bg-red-600 text-white font-bold py-4">Sem produto</button>
+                        <button onClick={() => recusar(recusando, 'Fechado')} className="w-full rounded-xl bg-red-600 text-white font-bold py-4">Fechado</button>
+                        {!recusaOutro ? (
+                            <button onClick={() => setRecusaOutro(true)} className="w-full rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 font-bold py-4">Outro</button>
+                        ) : (
+                            <div className="space-y-2">
+                                <input autoFocus value={recusaTexto} onChange={e => setRecusaTexto(e.target.value)} placeholder="Se quiser, escreva o motivo" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 p-3 text-sm text-gray-900 dark:text-gray-100" />
+                                <button onClick={() => recusar(recusando, recusaTexto.trim() ? `Outro: ${recusaTexto.trim()}` : 'Outro')} className="w-full rounded-xl bg-red-600 text-white font-bold py-3">Recusar pedido</button>
+                            </div>
+                        )}
+                        <button onClick={() => setRecusando(null)} className="w-full text-sm text-gray-600 dark:text-gray-300 underline py-1">Voltar</button>
+                    </div>
                 </div>
             )}
 

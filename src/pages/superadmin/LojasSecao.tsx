@@ -43,8 +43,8 @@ export const LojasSecao: React.FC = () => {
         categoria: '', cidade: '', aparecer_no_shopping: false, fin,
     });
     const [newStore, setNewStore] = useState(novoFormulario());
-    const [editForm, setEditForm] = useState<{ tipo: TipoDeLoja; plan_value: number; subscription_end_date: string; is_active: boolean; categoria: string; cidade: string; aparecer_no_shopping: boolean; aceita_dinheiro: boolean; pagamento_pix: boolean; pagamento_cartao: boolean; entrega_modo: 'propria' | 'app'; impulso: 'nenhum' | 'patrocinada' | 'destaque'; impulso_ate: string; fin: FormFinanceiro }>({
-        tipo: 'pdv_avancado', plan_value: 0, subscription_end_date: '', is_active: true, categoria: '', cidade: '', aparecer_no_shopping: false, aceita_dinheiro: true, pagamento_pix: true, pagamento_cartao: false, entrega_modo: 'propria', impulso: 'nenhum', impulso_ate: '', fin: FIN_PADRAO,
+    const [editForm, setEditForm] = useState<{ tipo: TipoDeLoja; plan_value: number; subscription_end_date: string; is_active: boolean; categoria: string; cidade: string; aparecer_no_shopping: boolean; aceita_dinheiro: boolean; pagamento_pix: boolean; pagamento_cartao: boolean; entrega_modo: 'propria' | 'app'; aceite_automatico: boolean; impulso: 'nenhum' | 'patrocinada' | 'destaque'; impulso_ate: string; fin: FormFinanceiro }>({
+        tipo: 'pdv_avancado', plan_value: 0, subscription_end_date: '', is_active: true, categoria: '', cidade: '', aparecer_no_shopping: false, aceita_dinheiro: true, pagamento_pix: true, pagamento_cartao: false, entrega_modo: 'propria', aceite_automatico: false, impulso: 'nenhum', impulso_ate: '', fin: FIN_PADRAO,
     });
 
     const handleCreateStore = async () => {
@@ -110,6 +110,8 @@ export const LojasSecao: React.FC = () => {
                 aceita_dinheiro: comissao ? editForm.aceita_dinheiro : true,
                 // controles do SQL 17: so vao se a coluna ja existe (a loja carregada traz o campo)
                 ...(comissao && editingStore.entrega_modo !== undefined ? { pagamento_pix: editForm.pagamento_pix, pagamento_cartao: editForm.pagamento_cartao, entrega_modo: editForm.entrega_modo } : {}),
+                // aceite automatico (SQL 18): so vai se a coluna ja existe
+                ...(comissao && editingStore.aceite_automatico !== undefined ? { aceite_automatico: editForm.aceite_automatico } : {}),
                 // impulsionamento (SQL 19): so vai se a coluna ja existe (a loja carregada traz o campo)
                 ...(editingStore.impulso !== undefined ? { impulso: editForm.impulso, impulso_ate: editForm.impulso === 'nenhum' || !editForm.impulso_ate ? null : new Date(editForm.impulso_ate + 'T23:59:59').toISOString() } : {}),
                 subscription_end_date: comissao ? null : (editForm.subscription_end_date ? new Date(editForm.subscription_end_date + 'T23:59:59').toISOString() : null),
@@ -138,6 +140,7 @@ export const LojasSecao: React.FC = () => {
             pagamento_pix: store.pagamento_pix ?? true,
             pagamento_cartao: store.pagamento_cartao ?? false,
             entrega_modo: store.entrega_modo ?? 'propria',
+            aceite_automatico: store.aceite_automatico ?? false,
             impulso: store.impulso ?? 'nenhum',
             impulso_ate: store.impulso_ate ? new Date(store.impulso_ate).toISOString().split('T')[0] : '',
             fin: { ...finPadroes(), ...(financeiros[store.id] ? { ...financeiros[store.id] } : {}) } as FormFinanceiro,
@@ -430,6 +433,12 @@ export const LojasSecao: React.FC = () => {
                                                     <option value="app">Motoboy do Pede Aki (o frete vai para o motoboy)</option>
                                                 </select>
                                             </div>
+                                            {editingStore.aceite_automatico !== undefined ? (
+                                                <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer">
+                                                    <input type="checkbox" checked={editForm.aceite_automatico} onChange={e => setEditForm({ ...editForm, aceite_automatico: e.target.checked })} className="h-4 w-4 mt-0.5" />
+                                                    <span>Aceite automático: o pedido pago já entra aceito, sem o lojista tocar (use em loja de estoque estável). Desligado, a loja tem 15 minutos para aceitar ou o pedido é cancelado e devolvido.</span>
+                                                </label>
+                                            ) : <p className="text-xs text-yellow-400">Para liberar o aceite automático, rode o SQL 18 (versão nova) no Supabase.</p>}
                                         </div>
                                     ) : (
                                         <p className="text-xs text-yellow-400">Para liberar os controles de pagamento e entrega, rode o SQL 17 no Supabase.</p>

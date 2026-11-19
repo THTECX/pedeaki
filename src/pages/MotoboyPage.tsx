@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../services/supabaseService';
+import { ativarPushMotoboy, renovarPushMotoboySeAtivo } from '../services/pushMotoboy';
 
 /**
- * Area do motoboy do Pede Aki (/motoboy). Login por telefone e senha (cadastro feito pelo administrador).
- * Ve entregas previstas (so aviso), disponiveis (pode pegar) e as dele; retira, avisa que chegou e fecha a entrega
- * digitando o codigo que o cliente passou. Atualiza sozinho a cada 5 segundos e avisa com som quando chega entrega nova.
+ * Central do motoboy do Pede Aki (/motoboy). Login por telefone e senha (cadastro feito pelo administrador).
+ * Fluxo (da mais distante para a mais proxima):
+ *   Previa (pedido feito, so aviso na tela) -> Pedido efetivado (a loja aceitou: ja da para ACEITAR a entrega, mesmo a caminho)
+ *   -> a loja clica Pronto (coleta disponivel para todos, ou aviso so para quem ja aceitou) -> na loja o motoboy toca "Peguei o pedido"
+ *   (o endereco do cliente aparece e o cliente recebe o codigo) -> entrega digitando o codigo que o cliente passou.
+ * Previa e efetivado nao tocam o celular. Atualiza sozinho a cada 5 segundos; coleta disponivel e pedido pronto apitam e vibram.
  */
 interface Entrega {
-    id: string; status: string; frete: number; loja: string; loja_endereco?: string | null; bairro?: string | null;
-    cliente?: string; endereco?: string; referencia?: string; prazo_retirar?: string | null; prazo_entregar?: string | null;
-    tentativas?: number; bloqueada?: boolean;
+    id: string; status: string; frete: number; loja: string; loja_endereco?: string | null; bairro?: string | null; pronta?: boolean;
+    cliente?: string; endereco?: string; referencia?: string; prazo_entregar?: string | null; pronto_previsto?: string | null;
+    preparo_min?: number; disponivel_em?: string | null; tentativas?: number; bloqueada?: boolean;
 }
-interface Painel { ok: boolean; erro?: string; nome: string; online: boolean; ganhos_hoje: number; a_receber: number; minhas: Entrega[]; disponiveis: Entrega[]; previstas: Entrega[] }
+interface Painel { ok: boolean; erro?: string; nome: string; online: boolean; ganhos_hoje: number; a_receber: number; minhas: Entrega[]; disponiveis: Entrega[]; efetivadas: Entrega[]; previas: Entrega[] }
 
 const CHAVE = 'pedeaki_motoboy_token';
 const brl = (v: number) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
@@ -38,7 +42,9 @@ export const MotoboyPage: React.FC = () => {
     const [painel, setPainel] = useState<Painel | null>(null);
     const [codigos, setCodigos] = useState<Record<string, string>>({});
     const [ocupado, setOcupado] = useState(false);
+    const [aviso, setAviso] = useState<{ ligado: boolean; motivo?: string }>({ ligado: false });
     const vistas = useRef<Set<string>>(new Set());
+    const prontasVistas = useRef<Set<string>>(new Set());
     const primeira = useRef(true);
 
     const apitar = () => {
@@ -62,7 +68,10 @@ export const MotoboyPage: React.FC = () => {
         setErro('');
         const novas = p.disponiveis.filter(e => !vistas.current.has(e.id));
         p.disponiveis.forEach(e => vistas.current.add(e.id));
-        if (!primeira.current && novas.length > 0 && p.online) apitar();
+        // pedido que eu ja aceitei e a loja acabou de marcar como pronto
+        const prontasNovas = p.minhas.filter(e => e.status === 'aceita' && e.pronta && !prontasVistas.current.has(e.id));
+        p.minhas.forEach(e => { if (e.pronta) prontasVistas.current.add(e.id); });
+        if (!primeira.current && (novas.length > 0 || prontasNovas.length > 0) && p.online) apitar();
         primeira.current = false;
         setPainel(p);
     }, [token]);
@@ -78,6 +87,18 @@ export const MotoboyPage: React.FC = () => {
         return () => { clearInterval(i); window.removeEventListener('online', agora); document.removeEventListener('visibilitychange', agora); };
     }, [token, atualizar]);
 
+    // Se o aviso com a tela bloqueada ja estava ligado neste aparelho, renova o registro em silencio.
+    useEffect(() => {
+        if (!token) return;
+        let vivo = true;
+        renovarPushMotoboySeAtivo(token).then(ok => { if (vivo && ok) setAviso({ ligado: true }); });
+        return () => { vivo = false; };
+    }, [token]);
+    const ligarAviso = async () => {
+        const r = await ativarPushMotoboy(token);
+        setAviso(r.ok ? { ligado: true } : { ligado: false, motivo: r.motivo });
+    };
+
     const entrar = async (ev: React.FormEvent) => {
         ev.preventDefault();
         setOcupado(true); setErro('');
@@ -87,7 +108,7 @@ export const MotoboyPage: React.FC = () => {
         if (!data?.ok) { setErro(data?.erro || 'Não foi possível entrar.'); return; }
         guardarToken(data.token); setToken(data.token); setSenha(''); primeira.current = true;
     };
-    const sair = () => { guardarToken(''); setToken(''); setPainel(null); vistas.current.clear(); };
+    const sair = () => { guardarToken(''); setToken(''); setPainel(null); vistas.current.clear(); prontasVistas.current.clear(); };
 
     const chamar = async (fn: string, args: Record<string, unknown>, sucesso?: () => void) => {
         setOcupado(true);
@@ -97,7 +118,11 @@ export const MotoboyPage: React.FC = () => {
         if (!data?.ok) { alert(data?.erro || 'Não foi possível.'); atualizar(); return data; }
         sucesso?.(); atualizar(); return data;
     };
-    const alternarOnline = () => painel && chamar('motoboy_online', { p_online: !painel.online });
+    const alternarOnline = async () => {
+        if (!painel) return;
+        const r = await chamar('motoboy_online', { p_online: !painel.online });
+        if (r?.ok && !painel.online && !aviso.ligado) void ligarAviso(); // ficou online: oferece ligar o aviso
+    };
     const entregar = async (e: Entrega) => {
         const codigo = (codigos[e.id] || '').trim();
         if (codigo.length !== 4) { alert('Digite os 4 números do código que o cliente passou.'); return; }
@@ -162,6 +187,14 @@ export const MotoboyPage: React.FC = () => {
                 {erro && <p className="rounded-lg bg-yellow-100 p-2 text-sm text-yellow-900">{erro}</p>}
                 {!painel.online && <p className="rounded-lg bg-white p-3 text-sm text-gray-700">Você está offline. Toque em Offline para ficar online, ouvir os avisos e aparecer para os clientes.</p>}
 
+                {painel.online && !aviso.ligado && (
+                    <div className="rounded-lg bg-white p-3 text-sm text-gray-700 space-y-2">
+                        <p>Para o celular tocar quando houver coleta, mesmo com a tela bloqueada, ligue o aviso neste aparelho.</p>
+                        <button onClick={ligarAviso} className={`${botao} bg-[#F26B1D] text-[#1F1F1F]`}>Ligar o aviso de coleta</button>
+                        {aviso.motivo && <p className="text-xs text-red-600">{aviso.motivo}</p>}
+                    </div>
+                )}
+
                 <section className="space-y-2">
                     <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Minhas entregas</h2>
                     {painel.minhas.length === 0 && <p className="text-sm text-gray-500">Nenhuma entrega com você agora.</p>}
@@ -173,11 +206,12 @@ export const MotoboyPage: React.FC = () => {
                             </div>
                             {e.status === 'aceita' && (
                                 <>
+                                    <p className="text-sm text-gray-700">Destino: {e.bairro || 'bairro a confirmar'}</p>
                                     <p className="text-sm text-gray-700">Retirar em: {e.loja_endereco || 'endereço da loja'}</p>
                                     {e.loja_endereco && <a className="text-sm font-bold text-blue-700 underline" href={maps(e.loja_endereco)} target="_blank" rel="noreferrer">Abrir a loja no mapa</a>}
-                                    <div><Contagem ate={e.prazo_retirar} rotulo="Retirar" /></div>
+                                    <p className={`text-sm font-bold ${e.pronta ? 'text-green-700' : 'text-gray-600'}`}>{e.pronta ? 'Pedido pronto! Pode coletar na loja.' : `Em preparo. Pronto por volta de ${hora(e.pronto_previsto)}.`}</p>
                                     <div className="flex gap-2">
-                                        <button disabled={ocupado} onClick={() => chamar('motoboy_retirei', { p_entrega: e.id })} className={`${botao} flex-1 bg-[#F26B1D] text-[#1F1F1F]`}>Retirei o pedido</button>
+                                        <button disabled={ocupado || !e.pronta} onClick={() => window.confirm('Você está na loja e pegou o pedido? O cliente será avisado e receberá o código de entrega.') && chamar('motoboy_retirei', { p_entrega: e.id })} className={`${botao} flex-1 bg-[#F26B1D] text-[#1F1F1F]`}>{e.pronta ? 'Peguei o pedido na loja' : 'Aguardando a loja ficar pronta'}</button>
                                         <button disabled={ocupado} onClick={() => window.confirm('Devolver esta entrega para outros motoboys?') && chamar('motoboy_soltar', { p_entrega: e.id })} className={`${botao} bg-gray-200 text-gray-800`}>Devolver</button>
                                     </div>
                                 </>
@@ -190,14 +224,17 @@ export const MotoboyPage: React.FC = () => {
                                     {e.endereco && <a className="text-sm font-bold text-blue-700 underline" href={maps(e.endereco.replace(/ - Bairro:/, ','))} target="_blank" rel="noreferrer">Abrir o destino no mapa</a>}
                                     <div><Contagem ate={e.prazo_entregar} rotulo="Entregar" /></div>
                                     <div className="rounded-lg bg-gray-50 p-2 space-y-2">
-                                        <p className="text-xs font-semibold text-gray-600">Só peça o código ao cliente quando entregar o pedido na mão dele.</p>
+                                        <p className="text-xs font-semibold text-gray-600">O cliente já recebeu o código no celular. Só peça o código quando entregar o pedido na mão dele.</p>
                                         <div className="flex gap-2">
                                             <input value={codigos[e.id] || ''} onChange={ev => setCodigos({ ...codigos, [e.id]: ev.target.value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" placeholder="Código do cliente" className="w-full rounded-lg border border-gray-300 p-2.5 text-center text-lg tracking-widest" disabled={!!e.bloqueada} />
                                             <button disabled={ocupado || !!e.bloqueada} onClick={() => entregar(e)} className={`${botao} bg-green-700 text-white`}>Entregar</button>
                                         </div>
                                         {e.bloqueada && <p className="text-xs font-bold text-red-600">Código bloqueado por erros. Fale com o suporte.</p>}
                                     </div>
-                                    <button disabled={ocupado} onClick={() => frustrada(e)} className={`${botao} w-full bg-gray-200 text-gray-800`}>Cliente não recebeu / não atende</button>
+                                    <div className="flex gap-2">
+                                        <button disabled={ocupado} onClick={() => chamar('motoboy_cheguei', { p_entrega: e.id })} className={`${botao} flex-1 bg-gray-200 text-gray-800`}>Cheguei ao destino</button>
+                                        <button disabled={ocupado} onClick={() => frustrada(e)} className={`${botao} flex-1 bg-gray-200 text-gray-800`}>Não recebeu</button>
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -205,28 +242,43 @@ export const MotoboyPage: React.FC = () => {
                 </section>
 
                 <section className="space-y-2">
-                    <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Entregas disponíveis</h2>
-                    {painel.disponiveis.length === 0 && <p className="text-sm text-gray-500">{painel.online ? 'Nenhuma entrega liberada agora. Fique atento.' : 'Fique online para ver e pegar entregas.'}</p>}
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Coleta disponível (pedido pronto)</h2>
+                    {painel.disponiveis.length === 0 && <p className="text-sm text-gray-500">{painel.online ? 'Nenhuma coleta pronta agora. Fique atento.' : 'Fique online para ver e aceitar entregas.'}</p>}
                     {painel.disponiveis.map(e => (
-                        <div key={e.id} className={caixa}>
+                        <div key={e.id} className={`${caixa} border-[#F26B1D] border-2`}>
                             <div className="flex items-center justify-between">
                                 <p className="font-bold text-[#1A1A1A]">{e.loja}</p>
                                 <p className="text-lg font-bold text-[#D1560F]">{brl(e.frete)}</p>
                             </div>
                             <p className="text-sm text-gray-700">Destino: {e.bairro || 'bairro a confirmar'}</p>
-                            <div className="flex flex-col"><Contagem ate={e.prazo_retirar} rotulo="Retirar" /><Contagem ate={e.prazo_entregar} rotulo="Entregar" /></div>
-                            <button disabled={ocupado || !painel.online} onClick={() => chamar('motoboy_aceitar', { p_entrega: e.id })} className={`${botao} w-full bg-[#F26B1D] text-[#1F1F1F]`}>Pegar esta entrega</button>
+                            <p className="text-sm text-gray-700">Retirar em: {e.loja_endereco || 'endereço da loja'}</p>
+                            {e.loja_endereco && <a className="text-sm font-bold text-blue-700 underline" href={maps(e.loja_endereco)} target="_blank" rel="noreferrer">Abrir a loja no mapa</a>}
+                            <p className="text-xs text-gray-500">Pedido pronto desde {hora(e.disponivel_em)}.</p>
+                            <button disabled={ocupado || !painel.online} onClick={() => chamar('motoboy_aceitar', { p_entrega: e.id })} className={`${botao} w-full bg-[#F26B1D] text-[#1F1F1F]`}>Aceitar esta entrega</button>
                         </div>
                     ))}
                 </section>
 
-                {painel.previstas.length > 0 && (
+                {painel.efetivadas.length > 0 && (
                     <section className="space-y-2">
-                        <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Em breve</h2>
-                        {painel.previstas.map(e => (
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Pedido efetivado (em preparo)</h2>
+                        {painel.efetivadas.map(e => (
+                            <div key={e.id} className="rounded-xl border border-gray-300 bg-white p-3 space-y-2">
+                                <div className="flex items-center justify-between"><p className="font-bold text-gray-800">{e.loja}</p><p className="font-bold text-[#D1560F]">{brl(e.frete)}</p></div>
+                                <p className="text-sm text-gray-600">A loja aceitou e está preparando. Destino: {e.bairro || 'a confirmar'}. Pronto por volta de {hora(e.pronto_previsto)}. Você já pode aceitar e ir para a loja.</p>
+                                <button disabled={ocupado || !painel.online} onClick={() => chamar('motoboy_aceitar', { p_entrega: e.id })} className={`${botao} w-full bg-[#F26B1D] text-[#1F1F1F]`}>Aceitar esta entrega</button>
+                            </div>
+                        ))}
+                    </section>
+                )}
+
+                {painel.previas.length > 0 && (
+                    <section className="space-y-2">
+                        <h2 className="text-sm font-bold uppercase tracking-wide text-gray-600">Prévia</h2>
+                        {painel.previas.map(e => (
                             <div key={e.id} className="rounded-xl border border-dashed border-gray-300 bg-gray-100 p-3">
                                 <div className="flex items-center justify-between"><p className="font-bold text-gray-700">{e.loja}</p><p className="font-bold text-gray-600">{brl(e.frete)}</p></div>
-                                <p className="text-sm text-gray-500">Destino: {e.bairro || 'a confirmar'}. A loja ainda vai aceitar o pedido. Se puder, fique perto.</p>
+                                <p className="text-sm text-gray-500">Destino: {e.bairro || 'a confirmar'}. Preparo costuma levar cerca de {e.preparo_min || 20} min. Ainda falta o pagamento e a loja aceitar; não é certo. Se puder, fique perto.</p>
                             </div>
                         ))}
                     </section>

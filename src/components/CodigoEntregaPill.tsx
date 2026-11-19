@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseService';
 
 /**
- * Codigo de entrega do cliente. Aparece depois que o PIX confirma, em pedido de Entrega feita pelo motoboy do Pede Aki, e
- * fica na tela (guardado no aparelho) ate a entrega acabar. So o cliente ve o codigo; o motoboy digita no aplicativo dele.
+ * Andamento e codigo de entrega do cliente. Aparece depois que o PIX confirma, em pedido de Entrega feita pelo motoboy do Pede Aki, e
+ * fica na tela (guardado no aparelho) ate a entrega acabar. O CODIGO so aparece quando o motoboy coleta o pedido na loja
+ * ("coletado, em rota de entrega"); so o cliente ve o codigo e o motoboy digita no aplicativo dele.
  */
 const CHAVE = 'pedeaki_pedido_ativo';
 export interface PedidoAtivo { orderId: string; phone: string; storeId: string }
@@ -12,12 +13,13 @@ export const guardarPedidoAtivo = (p: PedidoAtivo) => { try { localStorage.setIt
 const limpar = () => { try { localStorage.removeItem(CHAVE); } catch { /* tudo bem */ } };
 const ler = (): PedidoAtivo | null => { try { const b = localStorage.getItem(CHAVE); return b ? JSON.parse(b) as PedidoAtivo : null; } catch { return null; } };
 
-interface Info { tem_entrega: boolean; status?: string; codigo?: string | null; motoboy?: string | null; bloqueada?: boolean }
+interface Info { tem_entrega: boolean; status?: string; codigo?: string | null; motoboy?: string | null; bloqueada?: boolean; pronta?: boolean }
 const TEXTO: Record<string, string> = {
-    prevista: 'Aguardando a loja aceitar o pedido.',
-    disponivel: 'A loja está preparando. Estamos chamando um motoboy.',
-    aceita: 'O motoboy já foi chamado e vai retirar o pedido.',
-    retirada: 'O motoboy está a caminho com o seu pedido.',
+    prevista: 'Pagamento recebido. Aguardando a loja aceitar o pedido.',
+    efetivada: 'A loja aceitou e está preparando o seu pedido.',
+    disponivel: 'Pedido em fila de coleta. Estamos chamando um motoboy.',
+    aceita: 'Um motoboy já aceitou e vai coletar o seu pedido.',
+    retirada: 'Pedido coletado, em rota de entrega.',
 };
 
 export const CodigoEntregaPill = ({ storeId }: { storeId: string }) => {
@@ -45,7 +47,16 @@ export const CodigoEntregaPill = ({ storeId }: { storeId: string }) => {
         return () => { vivo = false; clearInterval(t); };
     }, [storeId]);
 
-    if (!pedido || !info || !info.codigo) return null;
+    if (!pedido || !info) return null;
+    if (!info.codigo) {
+        return (
+            <div className="fixed bottom-4 left-1/2 z-[64] w-[92%] max-w-sm -translate-x-1/2 rounded-2xl border border-primary bg-surface px-4 py-3 text-text-light shadow-xl">
+                <p className="text-xs font-bold uppercase tracking-wide text-text-dark">Seu pedido</p>
+                <p className="text-sm font-semibold">{info.status === 'aceita' && info.pronta ? 'Pedido pronto, aguardando o motoboy coletar.' : (TEXTO[info.status || ''] || 'Pedido em andamento.')}</p>
+                <p className="text-xs text-text-dark">O código para o motoboy aparece aqui quando ele coletar o pedido na loja.</p>
+            </div>
+        );
+    }
     if (!aberto) {
         return <button onClick={() => setAberto(true)} className="fixed bottom-4 right-4 z-[64] rounded-full bg-primary px-4 py-2 text-sm font-bold text-background shadow-lg">Código de entrega</button>;
     }

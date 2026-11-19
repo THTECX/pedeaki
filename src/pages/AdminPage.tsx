@@ -89,7 +89,7 @@ import {
 import { iniciarSincronizador, dispararEnvio } from '../offline/sincronizadorBalcao';
 import { AvisoConexaoBalcao } from '../components/AvisoConexaoBalcao';
 import { abaLiberada, temRecurso, tipoDaLoja } from '../services/recursos';
-import { PedidosCelular } from '../components/PedidosCelular';
+import { PedidosCelular, type PedidoExtra } from '../components/PedidosCelular';
 import { registrarMotivoCancelamento } from '../services/supabaseService';
 import { supabase as clienteSupabase, dispararEmissaoNotaFiscal } from '../services/supabaseService';
 import { ensureScaleAutoConnect, stopScaleAutoConnect } from '../services/scaleService';
@@ -478,6 +478,28 @@ const AdminPage = () => {
     // Refs espelho: o listener de teclado vive fora do ciclo de render e a
     // closure fica um ciclo atras. Ler daqui e o que evita a tecla "nao
     // funcionar as vezes". Ver Regra 10 no claude-acai.md.
+    // Loja de comissao: dados extras dos pedidos (quando pagou, entrega do Pede Aki). Se o SQL 18 ainda nao rodou, fica vazio.
+    const [pedidosExtra, setPedidosExtra] = useState<Record<string, PedidoExtra>>({});
+    const carregarExtras = useCallback(async () => {
+        if (!currentStore?.id || tipoDaLoja(currentStore) !== 'comissao') return;
+        const { data, error } = await supabase.rpc('lojista_pedidos_extra', { p_store: currentStore.id });
+        if (error || !Array.isArray(data)) return;
+        const m: Record<string, PedidoExtra> = {};
+        (data as PedidoExtra[]).forEach(x => { m[String(x.order_id)] = x; });
+        setPedidosExtra(m);
+    }, [currentStore?.id, currentStore?.modelo]);
+    useEffect(() => {
+        void carregarExtras();
+        const t = setInterval(carregarExtras, 10000);
+        return () => clearInterval(t);
+    }, [carregarExtras]);
+    const acaoDaEntrega = async (fn: 'lojista_pronto' | 'lojista_eu_entrego', o: Order) => {
+        const { data, error } = await supabase.rpc(fn, { p_order: String(o.id) });
+        if (error) { alert('Não foi possível agora. Verifique a internet e tente de novo.'); return; }
+        if (data && data.ok === false) alert(data.erro || 'Não foi possível.');
+        await carregarExtras();
+    };
+
     const activeTabRef = useRef(activeTab);
     activeTabRef.current = activeTab;
     const mesaBuscadaRef = useRef(mesaBuscada);
@@ -2059,8 +2081,11 @@ const AdminPage = () => {
                 {activeTab === 'orders' && usarPedidosCelular && (
                     <PedidosCelular
                         pedidos={filteredOrders}
-                        onAvancar={(o, novo) => handleStatusChange(o.id!, novo)}
+                        onAvancar={(o, novo) => handleStatusChange(o.id!, novo).then(carregarExtras)}
                         onCancelar={handleCancelarComMotivo}
+                        extras={pedidosExtra}
+                        onPronto={o => acaoDaEntrega('lojista_pronto', o)}
+                        onEuEntrego={o => { if (window.confirm('Você mesmo vai entregar este pedido? O frete fica com a loja e o motoboy deixa de ser chamado.')) void acaoDaEntrega('lojista_eu_entrego', o); }}
                     />
                 )}
 

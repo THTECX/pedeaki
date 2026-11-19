@@ -24,6 +24,10 @@ export interface Store {
   pagamento_cartao?: boolean;
   /** Quem entrega nas lojas de comissao: o proprio lojista ('propria') ou o motoboy do Pede Aki ('app'). */
   entrega_modo?: 'propria' | 'app';
+  /** Tempo medio de preparo em minutos (SQL 18); usado na previa do motoboy. */
+  tempo_preparo_min?: number;
+  /** Pedido pago ja entra aceito (SQL 18). So o administrador liga. */
+  aceite_automatico?: boolean;
   categoria?: string;
   cidade?: string;
   aparecer_no_shopping?: boolean;

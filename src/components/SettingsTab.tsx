@@ -26,6 +26,7 @@ import { printOrder, generateReceiptText } from '../services/printerService';
 import { requestSerialPort } from '../services/scaleService';
 import { checkoutRapidoAtivo, definirCheckoutRapido } from '../utils/checkoutPrefs';
 import { UpdateManager } from './UpdateManager';
+import { TempoDePreparoLoja } from './TempoDePreparoLoja';
 
 interface SettingsTabProps {
     settings: Settings;
@@ -178,6 +179,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, categories, 
     return (
         <div className="max-w-4xl mx-auto">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">Configurações da Loja</h2>
+            <TempoDePreparoLoja />
             <form onSubmit={handleSubmit} className="space-y-6">
 
 

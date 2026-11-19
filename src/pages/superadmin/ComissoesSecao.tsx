@@ -4,6 +4,7 @@ import { tipoDaLoja } from '../../services/recursos';
 import { estimarComissao, ehPedidoOnline, simularVolume, receitaComMistura, taxasPorMeio } from '../../services/comissao';
 import { usePlataforma } from './dados';
 import { CamposFinanceiros } from './CamposFinanceiros';
+import { AceiteLojas } from './AceiteLojas';
 import { FIN_PADRAO, brl, pct, type FormFinanceiro } from './util';
 
 const campo = 'w-full bg-gray-700 border-gray-600 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-500';
@@ -138,6 +139,8 @@ export const ComissoesSecao: React.FC = () => {
                 <h1 className="text-3xl font-bold text-white">Comissões</h1>
                 <p className="text-sm text-gray-400 mt-1">Lojas de comissão, condições, débito do dinheiro e estimativa dos últimos 30 dias. A cobrança automática chega com a fase do pagamento: por enquanto os valores são estimativas.</p>
             </div>
+
+            <AceiteLojas />
 
             {d.padroes === null && (
                 <div className="rounded-lg bg-yellow-900/40 border border-yellow-700 text-yellow-200 px-4 py-3 text-sm">As tabelas de comissão ainda não existem no banco. Rode o SQL 4 no Supabase.</div>
