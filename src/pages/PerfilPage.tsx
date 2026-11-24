@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Home, Search, ShoppingCart, User, ArrowRight, Store as StoreIcon, LogOut, MapPin, RotateCcw, Gift, X } from 'lucide-react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Home, Search, ShoppingCart, User, ArrowRight, Store as StoreIcon, LogOut, MapPin, RotateCcw, Gift, X, Bike } from 'lucide-react';
 import {
-    fetchLojasShopping, fetchInfoLojasShopping, fetchCustomerByPhone, fetchCustomerPointsBalance, fetchLastOrderByPhone,
+    supabase, fetchLojasShopping, fetchInfoLojasShopping, fetchCustomerByPhone, fetchCustomerPointsBalance, fetchLastOrderByPhone,
     canonicalPhone, type LojaShopping,
 } from '../services/supabaseService';
 import { statusDaLoja } from '../utils/lojaAberta';
 import { telefoneDoAparelho, guardarTelefoneDoAparelho, apagarTelefoneDoAparelho } from '../utils/telefoneCliente';
 import { InstalarApp } from '../components/InstalarApp';
+import { lerTokenMotoboy, guardarTokenMotoboy } from '../utils/motoboySessao';
 
 // Perfil do cliente, pensado para caber numa tela de celular sem rolar: quem sou, meu endereco, meu ultimo pedido (pedir de novo),
 // minha fidelidade e o botao "Lojas" (todas as lojas abertas agora, sem categoria). Entra so com o telefone, sem validacao
@@ -44,6 +45,13 @@ const PerfilPage: React.FC = () => {
     const [pontos, setPontos] = useState<number | null>(null);
     const [ultimo, setUltimo] = useState<Ultimo | null | undefined>(undefined);
     const [verLojas, setVerLojas] = useState(false);
+    // Motoboy: telefone no campo, senha no pop-up, e entra na Central dentro do app
+    const [mbTel, setMbTel] = useState('');
+    const [mbPopup, setMbPopup] = useState(false);
+    const [mbSenha, setMbSenha] = useState('');
+    const [mbErro, setMbErro] = useState('');
+    const [mbOcupado, setMbOcupado] = useState(false);
+    const temSessaoMotoboy = !!lerTokenMotoboy();
     const [abertas, setAbertas] = useState<LojaShopping[] | null>(null);
 
     useEffect(() => {
@@ -113,6 +121,25 @@ const PerfilPage: React.FC = () => {
         setTelefone(''); setCampo('');
     };
 
+    const continuarMotoboy = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (mbTel.replace(/\D/g, '').length < 8) { setMbErro('Digite o telefone com DDD.'); return; }
+        setMbErro(''); setMbSenha(''); setMbPopup(true);
+    };
+    const entrarMotoboy = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMbOcupado(true); setMbErro('');
+        const { data, error } = await supabase.rpc('motoboy_login', { p_telefone: mbTel, p_senha: mbSenha });
+        setMbOcupado(false);
+        if (error) { setMbErro('Sem conexão. Tente de novo.'); return; }
+        if (!data?.ok) { setMbErro(data?.erro || 'Não foi possível entrar.'); return; }
+        guardarTokenMotoboy(data.token);
+        navigate('/motoboy');
+    };
+
+    // Motoboy ja entrou neste aparelho e nao e cliente aqui: a porta o leva direto para a Central
+    if (!telefone && temSessaoMotoboy) return <Navigate to="/motoboy" replace />;
+
     return (
         <div className="min-h-screen flex justify-center bg-[#0B0910]" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
             <div className="w-full max-w-[390px] min-h-screen bg-[#110E15] text-[#F7EFE4] border-x border-[#241F2B] flex flex-col pb-20">
@@ -131,8 +158,8 @@ const PerfilPage: React.FC = () => {
                     {!telefone ? (
                         <section className="px-4">
                             <div style={corte(14)} className="bg-[#F7EFE4] text-[#15121A] p-4 flex flex-col gap-2.5 border-2 border-[#F7EFE4]">
-                                <h1 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[26px] tracking-wide uppercase leading-none">ENTRE COM O SEU TELEFONE</h1>
-                                <p className="text-[13px] text-[#55565B] leading-snug">Seus dados, seu último pedido e sua fidelidade num lugar só.</p>
+                                <h1 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[26px] tracking-wide uppercase leading-none">SOU CLIENTE</h1>
+                                <p className="text-[13px] text-[#55565B] leading-snug">Entre com o seu telefone: seus dados, seu último pedido e sua fidelidade num lugar só.</p>
                                 <form onSubmit={entrar} className="flex flex-col gap-2.5">
                                     <label style={corte(8)} className="flex items-center bg-white border border-[#E3D8C9] focus-within:border-[#FF6A1A]">
                                         <span className="pl-3 text-[14px] font-bold text-[#55565B]">+55</span>
@@ -153,6 +180,25 @@ const PerfilPage: React.FC = () => {
                                     </button>
                                 </form>
                             </div>
+
+                            <form onSubmit={continuarMotoboy} style={corte(12)} className="mt-2.5 bg-[#2A2430] border border-[#4A4154] p-3 flex flex-col gap-2">
+                                <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-widest text-[#CFC7D6]"><Bike size={16} className="text-[#FF6A1A]" />Sou motoboy</p>
+                                <div className="flex gap-2">
+                                    <input
+                                        value={mbTel}
+                                        onChange={e => { setMbTel(e.target.value); setMbErro(''); }}
+                                        type="tel" inputMode="tel" autoComplete="off"
+                                        placeholder="Telefone com DDD"
+                                        className="min-w-0 flex-1 bg-[#110E15] border border-[#4A4154] rounded-md px-3 py-2.5 text-[15px] text-[#F7EFE4] placeholder:text-[#8A8294] outline-none focus:border-[#FF6A1A]"
+                                    />
+                                    <button type="submit" style={corte(8)} className="shrink-0 px-4 bg-[#FF6A1A] text-black text-[13px] font-bold uppercase tracking-wider active:scale-95">Continuar</button>
+                                </div>
+                                {mbErro && !mbPopup && <p className="text-[12px] font-bold text-[#FF8A7A]">{mbErro}</p>}
+                            </form>
+
+                            <button onClick={() => navigate('/entrar')} style={corte(10)} className="mt-2.5 w-full py-3 border border-[#FF6A1A] bg-[#1A171F] text-[#F7EFE4] text-[14px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 active:scale-[0.98]">
+                                <StoreIcon size={16} className="text-[#FF6A1A]" />Sou lojista
+                            </button>
                         </section>
                     ) : (
                         <section className="px-4 flex flex-col gap-2.5">
@@ -196,10 +242,30 @@ const PerfilPage: React.FC = () => {
                         </section>
                     )}
 
-                    <button onClick={() => navigate('/entrar')} className="mx-4 py-2 text-[12px] font-bold uppercase tracking-wider text-[#CFC7D6] flex items-center justify-center gap-1.5">
-                        <StoreIcon size={14} className="text-[#FF6A1A]" />Sou lojista
-                    </button>
+                    {telefone && temSessaoMotoboy && (
+                        <button onClick={() => navigate('/motoboy')} className="mx-4 py-2 text-[12px] font-bold uppercase tracking-wider text-[#CFC7D6] flex items-center justify-center gap-1.5">
+                            <Bike size={14} className="text-[#FF6A1A]" />Ir para a central do motoboy
+                        </button>
+                    )}
                 </main>
+
+                {/* Senha do motoboy */}
+                {mbPopup && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-6" onClick={() => !mbOcupado && setMbPopup(false)}>
+                        <form onSubmit={entrarMotoboy} onClick={e => e.stopPropagation()} style={corte(14)} className="w-full max-w-[340px] bg-[#F7EFE4] text-[#15121A] p-5 flex flex-col gap-3">
+                            <h2 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[24px] tracking-wide uppercase leading-none">SENHA DO MOTOBOY</h2>
+                            <p className="text-[12px] text-[#55565B]">Telefone {mbTel}</p>
+                            <input
+                                autoFocus type="password" value={mbSenha} onChange={e => { setMbSenha(e.target.value); setMbErro(''); }}
+                                placeholder="Sua senha" autoComplete="current-password"
+                                className="w-full bg-white border border-[#E3D8C9] rounded-md px-3 py-3 text-[16px] font-bold text-[#15121A] placeholder:text-[#9A9AA0] outline-none focus:border-[#FF6A1A]"
+                            />
+                            {mbErro && <p className="text-[12px] font-bold text-[#B3261E]">{mbErro}</p>}
+                            <button disabled={mbOcupado || !mbSenha} type="submit" style={{ ...corte(10), fontFamily: 'Anton, sans-serif' }} className="w-full py-3 bg-[#FF6A1A] text-black text-[18px] tracking-wider uppercase disabled:opacity-50 active:scale-[0.98]">{mbOcupado ? 'ENTRANDO...' : 'ENTRAR'}</button>
+                            <button type="button" onClick={() => setMbPopup(false)} className="text-[12px] text-[#55565B] underline">Cancelar</button>
+                        </form>
+                    </div>
+                )}
 
                 {/* Lojas abertas agora (sem categoria) */}
                 {verLojas && (

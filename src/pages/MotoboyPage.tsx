@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { lerTokenMotoboy as lerToken, guardarTokenMotoboy as guardarToken } from '../utils/motoboySessao';
 import { supabase } from '../services/supabaseService';
 import { ativarPushMotoboy, renovarPushMotoboySeAtivo } from '../services/pushMotoboy';
 
@@ -17,12 +19,9 @@ interface Entrega {
 }
 interface Painel { ok: boolean; erro?: string; nome: string; online: boolean; ganhos_hoje: number; a_receber: number; minhas: Entrega[]; disponiveis: Entrega[]; efetivadas: Entrega[]; previas: Entrega[] }
 
-const CHAVE = 'pedeaki_motoboy_token';
 const brl = (v: number) => `R$ ${(Number(v) || 0).toFixed(2).replace('.', ',')}`;
 const hora = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
 const maps = (texto: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${texto}, Tocantins, MG`)}`;
-const lerToken = () => { try { return localStorage.getItem(CHAVE) || ''; } catch { return ''; } };
-const guardarToken = (t: string) => { try { t ? localStorage.setItem(CHAVE, t) : localStorage.removeItem(CHAVE); } catch { /* sem armazenamento: entra de novo na proxima */ } };
 
 const Contagem: React.FC<{ ate?: string | null; rotulo: string }> = ({ ate, rotulo }) => {
     const [, setT] = useState(0);
@@ -36,8 +35,7 @@ const Contagem: React.FC<{ ate?: string | null; rotulo: string }> = ({ ate, rotu
 
 export const MotoboyPage: React.FC = () => {
     const [token, setToken] = useState(lerToken());
-    const [telefone, setTelefone] = useState('');
-    const [senha, setSenha] = useState('');
+    const navigate = useNavigate();
     const [erro, setErro] = useState('');
     const [painel, setPainel] = useState<Painel | null>(null);
     const [codigos, setCodigos] = useState<Record<string, string>>({});
@@ -99,16 +97,7 @@ export const MotoboyPage: React.FC = () => {
         setAviso(r.ok ? { ligado: true } : { ligado: false, motivo: r.motivo });
     };
 
-    const entrar = async (ev: React.FormEvent) => {
-        ev.preventDefault();
-        setOcupado(true); setErro('');
-        const { data, error } = await supabase.rpc('motoboy_login', { p_telefone: telefone, p_senha: senha });
-        setOcupado(false);
-        if (error) { setErro('Sem conexão. Tente de novo.'); return; }
-        if (!data?.ok) { setErro(data?.erro || 'Não foi possível entrar.'); return; }
-        guardarToken(data.token); setToken(data.token); setSenha(''); primeira.current = true;
-    };
-    const sair = () => { guardarToken(''); setToken(''); setPainel(null); vistas.current.clear(); prontasVistas.current.clear(); };
+    const sair = () => { guardarToken(''); setToken(''); setPainel(null); vistas.current.clear(); prontasVistas.current.clear(); navigate('/perfil', { replace: true }); };
 
     const chamar = async (fn: string, args: Record<string, unknown>, sucesso?: () => void) => {
         setOcupado(true);
@@ -154,23 +143,9 @@ export const MotoboyPage: React.FC = () => {
         );
     }
 
-    if (!token || !painel) {
-        return (
-            <div className="min-h-screen bg-[#F3F3F1] text-[#1A1A1A] flex items-center justify-center p-4" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
-                <form onSubmit={entrar} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow space-y-4">
-                    <div className="text-center">
-                        <img src="/pwa-192x192.png" alt="Pede Aki" className="mx-auto h-16 w-16 rounded-lg bg-black object-cover" />
-                        <h1 className="mt-3 text-2xl font-bold text-[#1A1A1A]">Pede Aki Motoboy</h1>
-                        <p className="text-sm text-gray-500">Entre com o telefone e a senha que o Pede Aki passou para você.</p>
-                    </div>
-                    <input value={telefone} onChange={e => setTelefone(e.target.value)} inputMode="tel" placeholder="Telefone com DDD" className="w-full rounded-lg border border-gray-300 p-3 text-base bg-white text-[#1A1A1A] placeholder:text-gray-400" required />
-                    <input value={senha} onChange={e => setSenha(e.target.value)} type="password" placeholder="Senha" className="w-full rounded-lg border border-gray-300 p-3 text-base bg-white text-[#1A1A1A] placeholder:text-gray-400" required />
-                    {erro && <p className="text-sm font-semibold text-red-600">{erro}</p>}
-                    <button disabled={ocupado} className={`${botao} w-full bg-[#F26B1D] text-[#1F1F1F] text-base`}>{ocupado ? 'Entrando...' : 'Entrar'}</button>
-                </form>
-            </div>
-        );
-    }
+    // Sem sessao: a porta do app e o Perfil (cliente, motoboy e lojista entram por la).
+    if (!token) return <Navigate to="/perfil" replace />;
+    if (!painel) return null;
 
     return (
         <div className="min-h-screen bg-[#F3F3F1] text-[#1A1A1A] pb-10" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
