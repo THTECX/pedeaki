@@ -1392,12 +1392,19 @@ export const fetchLastOrderByPhone = async (phone: string, storeId: string): Pro
     if (sanitizedPhone.startsWith('55') && sanitizedPhone.length > 11) {
         sanitizedPhone = sanitizedPhone.substring(2);
     }
-    const { data, error } = await supabase.rpc('ultimo_pedido_por_telefone', { p_store: storeId, p_sufixo: sanitizedPhone });
-    if (error) {
-        console.error('Error fetching last order:', error);
-        return null;
+    // O pedido pode ter sido gravado com o 9 na frente do numero (11 digitos) e o perfil guarda o telefone sem ele (10): tenta os dois formatos.
+    const candidatos = [sanitizedPhone];
+    if (sanitizedPhone.length === 10) candidatos.push(`${sanitizedPhone.slice(0, 2)}9${sanitizedPhone.slice(2)}`);
+    else if (sanitizedPhone.length === 11 && sanitizedPhone[2] === '9') candidatos.push(`${sanitizedPhone.slice(0, 2)}${sanitizedPhone.slice(3)}`);
+    for (const sufixo of candidatos) {
+        const { data, error } = await supabase.rpc('ultimo_pedido_por_telefone', { p_store: storeId, p_sufixo: sufixo });
+        if (error) {
+            console.error('Error fetching last order:', error);
+            return null;
+        }
+        if (data) return mapOrderFromDB(data);
     }
-    return data ? mapOrderFromDB(data) : null;
+    return null;
 };
 
 const tokenDoLogin = async () => (await supabase.auth.getSession()).data.session?.access_token;
