@@ -182,6 +182,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, categories, 
             <TempoDePreparoLoja />
             <form onSubmit={handleSubmit} className="space-y-6">
 
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Endereço da loja</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-3">Onde o motoboy do Pede Aki busca o pedido. Também é o endereço que o ícone de mapa abre. Escreva como no Google Maps: rua, número, bairro e cidade.</p>
+                    <input
+                        type="text"
+                        value={formData.storeAddress || ''}
+                        onChange={(e) => setFormData({ ...formData, storeAddress: e.target.value })}
+                        placeholder="Rua, número, bairro, cidade"
+                        className="w-full p-2 text-sm border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Depois de escrever, toque em Salvar no fim desta página.</p>
+                </div>
+
 
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                     <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-900 dark:text-gray-100">

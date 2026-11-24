@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { criarLojaCompleta, updateStoreSubscription, salvarFinanceiro } from '../../services/supabaseService';
+import { supabase, criarLojaCompleta, updateStoreSubscription, salvarFinanceiro } from '../../services/supabaseService';
 import { tipoDaLoja, ROTULO_DO_TIPO, type TipoDeLoja } from '../../services/recursos';
 import type { Store } from '../../types';
 import { usePlataforma } from './dados';
@@ -43,6 +43,9 @@ export const LojasSecao: React.FC = () => {
         categoria: '', cidade: '', aparecer_no_shopping: false, fin,
     });
     const [newStore, setNewStore] = useState(novoFormulario());
+    // Endereco da loja (tabela settings; SQL 22): o motoboy usa para coletar o pedido
+    const [enderecoLoja, setEnderecoLoja] = useState('');
+    const [enderecoOrig, setEnderecoOrig] = useState<string | null>(null); // null = ainda nao carregou ou SQL 22 nao rodou
     const [editForm, setEditForm] = useState<{ tipo: TipoDeLoja; plan_value: number; subscription_end_date: string; is_active: boolean; categoria: string; cidade: string; aparecer_no_shopping: boolean; aceita_dinheiro: boolean; pagamento_pix: boolean; pagamento_cartao: boolean; entrega_modo: 'propria' | 'app'; aceite_automatico: boolean; impulso: 'nenhum' | 'patrocinada' | 'destaque'; impulso_ate: string; fin: FormFinanceiro }>({
         tipo: 'pdv_avancado', plan_value: 0, subscription_end_date: '', is_active: true, categoria: '', cidade: '', aparecer_no_shopping: false, aceita_dinheiro: true, pagamento_pix: true, pagamento_cartao: false, entrega_modo: 'propria', aceite_automatico: false, impulso: 'nenhum', impulso_ate: '', fin: FIN_PADRAO,
     });
@@ -97,6 +100,12 @@ export const LojasSecao: React.FC = () => {
     const handleUpdateStore = async () => {
         if (!editingStore) return;
         const comissao = editForm.tipo === 'comissao';
+        if (comissao && editForm.entrega_modo === 'app' && enderecoOrig !== null && !enderecoLoja.trim()
+            && !window.confirm('Esta loja entrega pelo motoboy do Pede Aki, mas está sem endereço. O motoboy não vai saber onde buscar o pedido. Salvar assim mesmo?')) return;
+        if (enderecoOrig !== null && enderecoLoja.trim() !== enderecoOrig.trim()) {
+            const { error: erroEndereco } = await supabase.rpc('definir_endereco_da_loja', { p_store: editingStore.id, p_endereco: enderecoLoja });
+            if (erroEndereco) return alert(`Não foi possível salvar o endereço: ${erroEndereco.message}`);
+        }
         if (editingStore.impulso !== undefined && editForm.impulso !== 'nenhum' && !editForm.impulso_ate) return alert('Informe até quando vai o impulsionamento.');
         try {
             await updateStoreSubscription(editingStore.id, {
@@ -128,6 +137,8 @@ export const LojasSecao: React.FC = () => {
 
     const openEditModal = (store: Store) => {
         setEditingStore(store);
+        setEnderecoLoja(''); setEnderecoOrig(null);
+        supabase.rpc('endereco_da_loja', { p_store: store.id }).then(({ data, error }) => { if (!error) { setEnderecoLoja(String(data || '')); setEnderecoOrig(String(data || '')); } });
         setEditForm({
             tipo: tipoDaLoja(store),
             plan_value: store.plan_value || 0,
@@ -375,6 +386,12 @@ export const LojasSecao: React.FC = () => {
                                     <label className="block text-sm font-medium text-gray-400 mb-1">Cidade</label>
                                     <input type="text" value={editForm.cidade} onChange={e => setEditForm({ ...editForm, cidade: e.target.value })} className={campoBase} />
                                 </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-400 mb-1">Endereço da loja (o motoboy busca o pedido aqui)</label>
+                                {enderecoOrig === null
+                                    ? <p className="text-xs text-yellow-400">Carregando... Se não carregar, rode o SQL 22 no Supabase.</p>
+                                    : <input type="text" value={enderecoLoja} onChange={e => setEnderecoLoja(e.target.value)} placeholder="Rua, número, bairro, cidade" className={campoBase} />}
                             </div>
                             <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
                                 <input type="checkbox" checked={editForm.aparecer_no_shopping} onChange={e => setEditForm({ ...editForm, aparecer_no_shopping: e.target.checked })} className="h-4 w-4" />
