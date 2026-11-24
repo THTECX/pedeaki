@@ -23,9 +23,13 @@ const mascara = (v: string) => {
 };
 const lerCpf = () => { try { return localStorage.getItem(CHAVE_CPF) || ''; } catch { return ''; } };
 const guardarCpf = (v: string) => { try { localStorage.setItem(CHAVE_CPF, v); } catch { /* sem armazenamento: digita de novo na proxima */ } };
+const esquecerCpf = () => { try { localStorage.removeItem(CHAVE_CPF); } catch { /* tudo bem */ } };
+/** Mostra so o meio do documento, para o CPF salvo nunca aparecer inteiro na tela de quem pega o celular emprestado. */
+const ocultar = (d: string) => d.length === 14 ? `••.•••.${d.slice(5, 8)}/${d.slice(8, 12)}-••` : `•••.${d.slice(3, 6)}.${d.slice(6, 9)}-••`;
 
 export const PagamentoPixOnline = ({ pedido, qrInicial, onQr, onPago, onExpirou, onVoltar }: Props) => {
-    const [cpf, setCpf] = useState(lerCpf());
+    const [cpf, setCpf] = useState('');             // o campo sempre comeca limpo
+    const [salvo, setSalvo] = useState(lerCpf());      // CPF guardado neste aparelho: so aparece como atalho, mascarado
     const [fase, setFase] = useState<'cpf' | 'gerando' | 'qr' | 'expirou'>(qrInicial ? 'qr' : 'cpf');
     const [erro, setErro] = useState('');
     const [qr, setQr] = useState<{ imagem: string; copiaCola: string } | null>(qrInicial || null);
@@ -92,7 +96,14 @@ export const PagamentoPixOnline = ({ pedido, qrInicial, onQr, onPago, onExpirou,
                                 className="mt-1 w-full p-2.5 bg-background border border-surface rounded-lg outline-none focus:border-primary text-base"
                             />
                         </label>
-                        <p className="text-xs text-text-dark">O banco exige o CPF para gerar o PIX. Guardamos só neste aparelho, para você não digitar de novo.</p>
+                        {so(salvo).length >= 11 && !so(cpf) && (
+                            <p className="text-xs text-text-dark">
+                                CPF guardado neste aparelho: {ocultar(so(salvo))}.{' '}
+                                <button type="button" onClick={() => setCpf(salvo)} className="font-bold text-primary underline">Usar este</button>{' '}
+                                <button type="button" onClick={() => { esquecerCpf(); setSalvo(''); }} className="underline">Esquecer</button>
+                            </p>
+                        )}
+                        <p className="text-xs text-text-dark">O banco exige o CPF para gerar o PIX. Se quiser, guardamos só neste aparelho, mascarado, para você usar de novo com um toque.</p>
                         {erro && <p className="text-sm text-red-500 font-semibold">{erro}</p>}
                         <button onClick={gerar} disabled={fase === 'gerando'} className="w-full py-3 bg-primary text-background font-bold rounded-lg disabled:opacity-50">
                             {fase === 'gerando' ? 'Gerando o PIX...' : 'Gerar PIX'}
