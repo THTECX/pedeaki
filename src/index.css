@@ -376,3 +376,17 @@ body {
 .introjs-arrow.left {
   border-right-color: #ffffff !important;
 }
+
+
+/* Campos de formulario com letra sempre legivel: sem cor propria eles herdavam a letra clara do tema escuro
+   e ficavam ilegiveis sobre o fundo branco do tema claro (ex.: Configuracoes da loja). */
+.campos-legiveis input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+.campos-legiveis select,
+.campos-legiveis textarea {
+  color: #111827;
+}
+.dark .campos-legiveis input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+.dark .campos-legiveis select,
+.dark .campos-legiveis textarea {
+  color: #ffffff;
+}

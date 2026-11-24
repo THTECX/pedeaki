@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Home, Search, ShoppingCart, User, ArrowRight, Store as StoreIcon, LogOut } from 'lucide-react';
+import { Home, Search, ShoppingCart, User, ArrowRight, Store as StoreIcon, LogOut, MapPin, RotateCcw } from 'lucide-react';
 import {
     fetchLojasShopping, fetchCustomerByPhone, fetchCustomerPointsBalance, fetchLastOrderByPhone,
     canonicalPhone, type LojaShopping,
@@ -21,7 +21,11 @@ const corte = (px: number): React.CSSProperties => ({
 const mascara = (canon: string) => (canon.length === 10 ? `(${canon.slice(0, 2)}) ${canon.slice(2, 6)}-${canon.slice(6)}` : canon);
 const moeda = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-interface DadosLoja { loja: LojaShopping; pontos: number; ultimo: { total: number; status: string; quando: string } | null }
+interface DadosLoja { loja: LojaShopping; pontos: number; ultimo: { total: number; status: string; quando: string; itens: string } | null }
+const resumoDosItens = (itens: any[] | undefined): string => {
+    const lista = (itens || []).filter(i => Number(i.price) > 0).map(i => `${i.quantity || 1}x ${i.name}`);
+    return lista.length <= 3 ? lista.join(', ') : `${lista.slice(0, 3).join(', ')} e mais ${lista.length - 3}`;
+};
 
 const PerfilPage: React.FC = () => {
     const navigate = useNavigate();
@@ -29,6 +33,7 @@ const PerfilPage: React.FC = () => {
     const [campo, setCampo] = useState('');
     const [erro, setErro] = useState('');
     const [nome, setNome] = useState('');
+    const [endereco, setEndereco] = useState('');
     const [dados, setDados] = useState<DadosLoja[] | null>(null);
 
     useEffect(() => {
@@ -41,7 +46,7 @@ const PerfilPage: React.FC = () => {
 
     // Com o telefone salvo, busca o que o cliente tem em cada loja (só leitura, funções que já existem)
     useEffect(() => {
-        if (!telefone) { setDados(null); setNome(''); return; }
+        if (!telefone) { setDados(null); setNome(''); setEndereco(''); return; }
         let vivo = true;
         (async () => {
             try {
@@ -52,14 +57,15 @@ const PerfilPage: React.FC = () => {
                         fetchCustomerPointsBalance(telefone, loja.id).catch(() => 0),
                         fetchLastOrderByPhone(telefone, loja.id).catch(() => null),
                     ]);
-                    return { loja, nome: cliente?.name || '', pontos, ultimo };
+                    return { loja, nome: cliente?.name || '', endereco: cliente?.address || '', pontos, ultimo };
                 }));
                 if (!vivo) return;
                 setNome(linhas.find(l => l.nome)?.nome || '');
+                setEndereco((linhas.find(l => l.endereco)?.endereco || '').replace(/ - Bairro: /, ', '));
                 setDados(linhas.map(l => ({
                     loja: l.loja,
                     pontos: l.pontos,
-                    ultimo: l.ultimo ? { total: Number(l.ultimo.total) || 0, status: String(l.ultimo.status || ''), quando: l.ultimo.timestamp || '' } : null,
+                    ultimo: l.ultimo ? { total: Number(l.ultimo.total) || 0, status: String(l.ultimo.status || ''), quando: l.ultimo.timestamp || '', itens: resumoDosItens(l.ultimo.items as any[]) } : null,
                 })));
             } catch {
                 if (vivo) setDados([]);
@@ -81,7 +87,7 @@ const PerfilPage: React.FC = () => {
 
     const sair = () => {
         apagarTelefoneDoAparelho();
-        setTelefone(''); setCampo(''); setDados(null); setNome('');
+        setTelefone(''); setCampo(''); setDados(null); setNome(''); setEndereco('');
     };
 
     return (
@@ -132,6 +138,12 @@ const PerfilPage: React.FC = () => {
                                 <button onClick={sair} style={corte(8)} className="shrink-0 flex items-center gap-1 px-3 py-2 bg-[#15121A] text-[#F7EFE4] text-[11px] font-bold uppercase tracking-wider"><LogOut size={14} />Sair</button>
                             </div>
 
+                            <div style={corte(12)} className="bg-[#2A2430] border border-[#4A4154] p-3 flex flex-col gap-1.5">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-[#CFC7D6]">Seus dados</p>
+                                <p className="text-[15px] font-bold">{nome || 'Nome ainda não informado'}</p>
+                                <p className="text-[13px] text-[#CFC7D6] flex items-start gap-1.5"><MapPin size={14} className="mt-0.5 shrink-0 text-[#FF6A1A]" />{endereco || 'Endereço salvo no primeiro pedido de entrega.'}</p>
+                            </div>
+
                             <div className="flex items-center gap-2">
                                 <span className="w-2.5 h-2.5 bg-[#FF6A1A] rotate-45 shadow-[0_0_6px_#FF6A1A]" />
                                 <h2 style={{ fontFamily: 'Anton, sans-serif' }} className="text-[24px] tracking-wide uppercase leading-none">SUAS LOJAS</h2>
@@ -139,16 +151,24 @@ const PerfilPage: React.FC = () => {
                             {dados === null && <p className="text-[13px] text-[#CFC7D6]">Buscando o que você tem em cada loja...</p>}
                             {dados !== null && dados.length === 0 && <p className="text-[13px] text-[#CFC7D6]">Nenhuma loja encontrada agora. Tente de novo em instantes.</p>}
                             {dados?.map(({ loja, pontos, ultimo }) => (
-                                <Link key={loja.id} to={`/${loja.slug}`} style={corte(12)} className="bg-[#2A2430] border border-[#4A4154] p-3 flex flex-col gap-2 active:scale-[0.99]">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="flex items-center gap-2 min-w-0"><StoreIcon size={16} className="text-[#FF6A1A] shrink-0" /><span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[18px] tracking-wide uppercase leading-none truncate">{loja.name}</span></span>
-                                        <ArrowRight size={16} className="text-[#FF6A1A] shrink-0" />
-                                    </div>
-                                    <div className="flex gap-4 text-[12px] text-[#CFC7D6]">
+                                <div key={loja.id} style={corte(12)} className="bg-[#2A2430] border border-[#4A4154] p-3 flex flex-col gap-2">
+                                    <span className="flex items-center gap-2 min-w-0"><StoreIcon size={16} className="text-[#FF6A1A] shrink-0" /><span style={{ fontFamily: 'Anton, sans-serif' }} className="text-[18px] tracking-wide uppercase leading-none truncate">{loja.name}</span></span>
+                                    <div className="text-[12px] text-[#CFC7D6] flex flex-col gap-0.5">
                                         <span>Pontos: <b className="text-[#F7EFE4]">{pontos}</b></span>
-                                        <span className="min-w-0 truncate">{ultimo ? `Último pedido: ${moeda(ultimo.total)}${ultimo.quando ? ` em ${new Date(ultimo.quando).toLocaleDateString('pt-BR')}` : ''}` : 'Nenhum pedido ainda'}</span>
+                                        {ultimo
+                                            ? <>
+                                                <span>Último pedido: <b className="text-[#F7EFE4]">{moeda(ultimo.total)}</b>{ultimo.quando ? ` em ${new Date(ultimo.quando).toLocaleDateString('pt-BR')}` : ''}</span>
+                                                {ultimo.itens && <span className="truncate">{ultimo.itens}</span>}
+                                            </>
+                                            : <span>Nenhum pedido ainda</span>}
                                     </div>
-                                </Link>
+                                    <div className="flex gap-2 pt-1">
+                                        {ultimo && (
+                                            <Link to={`/${loja.slug}?repetir=1`} style={corte(8)} className="flex-1 py-2.5 bg-[#FF6A1A] text-black text-[13px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-[0.98]"><RotateCcw size={14} />Pedir de novo</Link>
+                                        )}
+                                        <Link to={`/${loja.slug}`} style={corte(8)} className="flex-1 py-2.5 border border-[#FF6A1A]/60 bg-[#1A171F] text-[#F7EFE4] text-[13px] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 active:scale-[0.98]">Ver cardápio<ArrowRight size={14} className="text-[#FF6A1A]" /></Link>
+                                    </div>
+                                </div>
                             ))}
                         </section>
                     )}

@@ -176,8 +176,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({ settings, categories, 
         setLoading(false);
     };
 
+    // Campos sem cor propria herdavam a letra clara do tema escuro e ficavam ilegiveis no tema claro: aqui a cor e explicita nos dois temas.
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-4xl mx-auto campos-legiveis">
             <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">Configurações da Loja</h2>
             <TempoDePreparoLoja />
             <form onSubmit={handleSubmit} className="space-y-6">

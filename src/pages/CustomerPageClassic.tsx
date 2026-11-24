@@ -1173,6 +1173,16 @@ const SideCart: React.FC<{
                     createdOrder = await createOrder(orderData);
                 }
 
+                // Cadastro do cliente: nome, endereco e ponto de referencia ficam salvos na primeira compra (e se atualizam nas seguintes),
+                // para o Perfil e o proximo pedido ja virem preenchidos. Nunca trava o pedido.
+                if (createdOrder) {
+                    const entrega = orderType === 'Entrega';
+                    upsertCustomer({
+                        store_id: storeId, phone: finalPhone, name: customerName,
+                        ...(entrega ? { address: orderData.address, reference_point: referencePoint } : {}),
+                    }).catch(e => console.warn('[cliente] nao foi possivel salvar o cadastro agora:', e));
+                }
+
                 if (createdOrder && createdOrder.status === 'Aguardando pagamento') {
                     const novo: PixPendente = {
                         storeId, pedido: { id: String(createdOrder.id), phone: finalPhone, total: Number(createdOrder.total) || total, pagarAte: createdOrder.pagar_ate || createdOrder.pagarAte || new Date(Date.now() + 15 * 60000).toISOString() },
@@ -2411,12 +2421,12 @@ const CustomerPage: React.FC<{ pedeAki?: boolean }> = ({ pedeAki = false }) => {
                 setCustomerName(customer.name);
                 setPhone(customer.phone);
                 // Split address and number if present accurately
-                const addrParts = (customer.address || '').split(', ');
+                const addrParts = (customer.address || '').replace(/ - Bairro: .*$/, '').split(', ');
                 if (addrParts.length >= 2) {
                     setHouseNumber(addrParts[addrParts.length - 1]);
                     setAddress(addrParts.slice(0, -1).join(', '));
                 } else {
-                    setAddress(customer.address || '');
+                    setAddress((customer.address || '').replace(/ - Bairro: .*$/, ''));
                     setHouseNumber('');
                 }
                 setReferencePoint(customer.reference_point || '');
@@ -2576,6 +2586,25 @@ const CustomerPage: React.FC<{ pedeAki?: boolean }> = ({ pedeAki = false }) => {
         setIsRepeatingOrder(true);
 
         try {
+            // Loja de comissao: o pedido repetido NAO vai direto para a loja. Os itens voltam para o carrinho (com o preco de hoje,
+            // sem o que acabou) e o cliente passa pelo pagamento online como em qualquer pedido.
+            if (currentStore.modelo === 'comissao') {
+                const base = (customItems && customItems.length > 0 ? customItems : lastOrder.items)
+                    .filter(i => Number(i.price) > 0 && !String(i.name || '').toLowerCase().includes('fidelidade') && !i.isLoyaltyRedemption);
+                const novos: CartItem[] = [];
+                const faltou: string[] = [];
+                base.forEach((it, idx) => {
+                    const atual = menu.menuItems.find(m => String(m.id) === String(it.id));
+                    if (!atual || !atual.isAvailable) { faltou.push(it.name); return; }
+                    novos.push({ ...it, price: Number(atual.price) || it.price, cartId: `${it.id}-${Date.now()}-${idx}` } as CartItem);
+                });
+                if (novos.length === 0) { alert('Os itens do último pedido não estão disponíveis agora. Escolha no cardápio.'); return; }
+                setCart(novos);
+                setShowRecognitionModal(false);
+                setIsCartOpen(true);
+                if (faltou.length > 0) alert(`Estes itens não estão disponíveis agora e ficaram de fora: ${faltou.join(', ')}.`);
+                return;
+            }
             const finalPaymentMethod = paymentMethod;
             let finalChange = changeFor ? parseFloat(changeFor) : undefined;
 
@@ -2728,6 +2757,15 @@ const CustomerPage: React.FC<{ pedeAki?: boolean }> = ({ pedeAki = false }) => {
             setIsRepeatingOrder(false);
         }
     };
+    // Vindo do Perfil (botao "Pedir de novo"): assim que o cliente e o ultimo pedido carregam, o carrinho abre com os itens.
+    useEffect(() => {
+        if (!pedeAki || !lastOrder || !recognizedCustomer || !settings || !currentStore || menu.menuItems.length === 0) return;
+        if (new URLSearchParams(window.location.search).get('repetir') !== '1') return;
+        window.history.replaceState({}, '', window.location.pathname);
+        void handleRepeatOrder();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pedeAki, lastOrder, recognizedCustomer, settings, currentStore, menu.menuItems.length]);
+
     const handleNewOrderWithCustomer = () => {
         console.log("handleNewOrderWithCustomer called - Closing modal");
         setShowRecognitionModal(false);

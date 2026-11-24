@@ -143,7 +143,7 @@ export const MotoboyPage: React.FC = () => {
     // Ja entrou mas o painel ainda nao chegou (carregando ou sem internet): nao volta para a tela de senha.
     if (token && !painel) {
         return (
-            <div className="min-h-screen bg-[#F3F3F1] flex items-center justify-center p-6 text-center" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+            <div className="min-h-screen bg-[#F3F3F1] text-[#1A1A1A] flex items-center justify-center p-6 text-center" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
                 <div className="space-y-3">
                     <p className="text-lg font-bold text-[#1A1A1A]">Carregando suas entregas...</p>
                     {erro && <p className="text-sm text-gray-600">{erro} Assim que a internet voltar, atualiza sozinho.</p>}
@@ -156,15 +156,15 @@ export const MotoboyPage: React.FC = () => {
 
     if (!token || !painel) {
         return (
-            <div className="min-h-screen bg-[#F3F3F1] flex items-center justify-center p-4" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+            <div className="min-h-screen bg-[#F3F3F1] text-[#1A1A1A] flex items-center justify-center p-4" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
                 <form onSubmit={entrar} className="w-full max-w-sm rounded-2xl bg-white p-6 shadow space-y-4">
                     <div className="text-center">
                         <img src="/pwa-192x192.png" alt="Pede Aki" className="mx-auto h-16 w-16 rounded-lg bg-black object-cover" />
                         <h1 className="mt-3 text-2xl font-bold text-[#1A1A1A]">Pede Aki Motoboy</h1>
                         <p className="text-sm text-gray-500">Entre com o telefone e a senha que o Pede Aki passou para você.</p>
                     </div>
-                    <input value={telefone} onChange={e => setTelefone(e.target.value)} inputMode="tel" placeholder="Telefone com DDD" className="w-full rounded-lg border border-gray-300 p-3 text-base" required />
-                    <input value={senha} onChange={e => setSenha(e.target.value)} type="password" placeholder="Senha" className="w-full rounded-lg border border-gray-300 p-3 text-base" required />
+                    <input value={telefone} onChange={e => setTelefone(e.target.value)} inputMode="tel" placeholder="Telefone com DDD" className="w-full rounded-lg border border-gray-300 p-3 text-base bg-white text-[#1A1A1A] placeholder:text-gray-400" required />
+                    <input value={senha} onChange={e => setSenha(e.target.value)} type="password" placeholder="Senha" className="w-full rounded-lg border border-gray-300 p-3 text-base bg-white text-[#1A1A1A] placeholder:text-gray-400" required />
                     {erro && <p className="text-sm font-semibold text-red-600">{erro}</p>}
                     <button disabled={ocupado} className={`${botao} w-full bg-[#F26B1D] text-[#1F1F1F] text-base`}>{ocupado ? 'Entrando...' : 'Entrar'}</button>
                 </form>
@@ -173,7 +173,7 @@ export const MotoboyPage: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-[#F3F3F1] pb-10" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
+        <div className="min-h-screen bg-[#F3F3F1] text-[#1A1A1A] pb-10" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
             <header className="sticky top-0 z-10 bg-[#F26B1D] px-4 py-3 text-[#1F1F1F]">
                 <div className="mx-auto flex max-w-md items-center gap-3">
                     <div className="flex-1">
@@ -226,7 +226,7 @@ export const MotoboyPage: React.FC = () => {
                                     <div className="rounded-lg bg-gray-50 p-2 space-y-2">
                                         <p className="text-xs font-semibold text-gray-600">O cliente já recebeu o código no celular. Só peça o código quando entregar o pedido na mão dele.</p>
                                         <div className="flex gap-2">
-                                            <input value={codigos[e.id] || ''} onChange={ev => setCodigos({ ...codigos, [e.id]: ev.target.value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" placeholder="Código do cliente" className="w-full rounded-lg border border-gray-300 p-2.5 text-center text-lg tracking-widest" disabled={!!e.bloqueada} />
+                                            <input value={codigos[e.id] || ''} onChange={ev => setCodigos({ ...codigos, [e.id]: ev.target.value.replace(/\D/g, '').slice(0, 4) })} inputMode="numeric" placeholder="Código do cliente" className="w-full rounded-lg border border-gray-300 p-2.5 text-center text-lg tracking-widest bg-white text-[#1A1A1A] placeholder:text-gray-400" disabled={!!e.bloqueada} />
                                             <button disabled={ocupado || !!e.bloqueada} onClick={() => entregar(e)} className={`${botao} bg-green-700 text-white`}>Entregar</button>
                                         </div>
                                         {e.bloqueada && <p className="text-xs font-bold text-red-600">Código bloqueado por erros. Fale com o suporte.</p>}
