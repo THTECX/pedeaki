@@ -134,11 +134,11 @@ const PerfilPage: React.FC = () => {
         if (error) { setMbErro('Sem conexão. Tente de novo.'); return; }
         if (!data?.ok) { setMbErro(data?.erro || 'Não foi possível entrar.'); return; }
         guardarTokenMotoboy(data.token);
-        navigate('/motoboy');
+        navigate('/motoboy/perfil');
     };
 
     // Motoboy ja entrou neste aparelho e nao e cliente aqui: a porta o leva direto para a Central
-    if (!telefone && temSessaoMotoboy) return <Navigate to="/motoboy" replace />;
+    if (!telefone && temSessaoMotoboy) return <Navigate to="/motoboy/perfil" replace />;
 
     return (
         <div className="min-h-screen flex justify-center bg-[#0B0910]" style={{ fontFamily: '"Space Grotesk", sans-serif' }}>
@@ -243,8 +243,8 @@ const PerfilPage: React.FC = () => {
                     )}
 
                     {telefone && temSessaoMotoboy && (
-                        <button onClick={() => navigate('/motoboy')} className="mx-4 py-2 text-[12px] font-bold uppercase tracking-wider text-[#CFC7D6] flex items-center justify-center gap-1.5">
-                            <Bike size={14} className="text-[#FF6A1A]" />Ir para a central do motoboy
+                        <button onClick={() => navigate('/motoboy/perfil')} className="mx-4 py-2 text-[12px] font-bold uppercase tracking-wider text-[#CFC7D6] flex items-center justify-center gap-1.5">
+                            <Bike size={14} className="text-[#FF6A1A]" />Ir para o meu perfil de motoboy
                         </button>
                     )}
                 </main>

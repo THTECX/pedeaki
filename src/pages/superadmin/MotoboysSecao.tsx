@@ -3,9 +3,10 @@ import { supabase } from '../../services/supabaseService';
 import { usePlataforma } from './dados';
 import { brl, dataHora } from './util';
 import { telefoneBonito } from '../../utils/telefoneCliente';
+import { CarteiraJanela } from './CarteiraJanela';
 
 interface Motoboy { id: string; nome: string; telefone: string; wallet_id: string | null; ativo: boolean; online: boolean; online_em: string | null }
-interface Repasse { id: string; valor: number; status: 'pendente' | 'pago'; criado_em: string; pago_em: string | null; observacao: string | null; motoboy_id: string }
+interface Repasse { id: string; valor: number; status: 'pendente' | 'enviando' | 'pago'; criado_em: string; pago_em: string | null; observacao: string | null; motoboy_id: string; ultimo_erro?: string | null; tentativas?: number }
 interface Entrega { id: string; order_id: string; store_id: string; motoboy_id: string | null; status: string; frete: number; motivo: string | null; bloqueada: boolean; tentativas: number; criada_em: string }
 
 const campo = 'w-full bg-gray-700 border-gray-600 rounded-lg p-2 text-white text-sm';
@@ -17,12 +18,13 @@ export const MotoboysSecao: React.FC = () => {
     const [repasses, setRepasses] = useState<Repasse[]>([]);
     const [entregas, setEntregas] = useState<Entrega[]>([]);
     const [erro, setErro] = useState('');
+    const [carteiraDe, setCarteiraDe] = useState<Motoboy | null>(null);
     const [form, setForm] = useState({ nome: '', telefone: '', senha: '', wallet_id: '' });
 
     const carregar = useCallback(async () => {
         const [m, r, e] = await Promise.all([
             supabase.from('motoboys_app').select('id,nome,telefone,wallet_id,ativo,online,online_em').order('nome'),
-            supabase.from('repasses_motoboy').select('id,valor,status,criado_em,pago_em,observacao,motoboy_id').order('criado_em', { ascending: false }).limit(200),
+            supabase.from('repasses_motoboy').select('*').order('criado_em', { ascending: false }).limit(200),
             supabase.from('entregas_app').select('id,order_id,store_id,motoboy_id,status,frete,motivo,bloqueada,tentativas,criada_em').order('criada_em', { ascending: false }).limit(40),
         ]);
         if (m.error) { setErro('Rode o SQL 18 no Supabase para liberar os motoboys. (' + m.error.message + ')'); return; }
@@ -65,14 +67,19 @@ export const MotoboysSecao: React.FC = () => {
         carregar();
     };
 
-    const pendentes = repasses.filter(r => r.status === 'pendente');
+    // Motoboy com carteira recebe sozinho (transferencia automatica); aqui so entra o que precisa de mao: sem carteira,
+    // ou que o Asaas recusou 5 vezes, ou que ficou "enviando" sem resposta (conferir no extrato antes de pagar de novo).
+    const comCarteira = (id: string) => !!motoboys.find(m => m.id === id)?.wallet_id;
+    const pendentes = repasses.filter(r => (r.status === 'pendente' && (!comCarteira(r.motoboy_id) || (r.tentativas || 0) >= 5)) || (r.status === 'enviando' && !!r.ultimo_erro));
+    const automaticos = repasses.filter(r => (r.status === 'pendente' || r.status === 'enviando') && !pendentes.includes(r));
     const totalPendente = pendentes.reduce((s, r) => s + Number(r.valor), 0);
 
     return (
         <div className="space-y-8">
+            {carteiraDe && <CarteiraJanela titulo={`Carteira: ${carteiraDe.nome}`} tipo="motoboy" id={carteiraDe.id} onFechar={() => { setCarteiraDe(null); carregar(); }} />}
             <div>
                 <h1 className="text-3xl font-bold text-white">Motoboys do Pede Aki</h1>
-                <p className="text-sm text-gray-400 mt-1">Cadastro, quem está online, entregas e repasse do frete. O motoboy entra em /motoboy com telefone e senha.</p>
+                <p className="text-sm text-gray-400 mt-1">Cadastro, quem está online, entregas e repasse do frete. O motoboy entra pelo Perfil do app (Sou motoboy) com telefone e senha.</p>
             </div>
             {erro && <div className="rounded-lg bg-yellow-900/40 border border-yellow-700 p-3 text-sm text-yellow-200">{erro}</div>}
 
@@ -98,6 +105,7 @@ export const MotoboysSecao: React.FC = () => {
                         <span className="text-xs text-gray-500">{noAr(m) ? 'online agora' : 'offline'}{m.wallet_id ? ' | com carteira' : ' | sem carteira'}</span>
                         {!m.ativo && <span className="text-xs text-red-300">desativado</span>}
                         <span className="flex-1" />
+                        <button onClick={() => setCarteiraDe(m)} className="rounded-lg bg-orange-700 px-3 py-1.5 text-xs font-bold text-white">Carteira</button>
                         <button onClick={() => trocarSenha(m)} className="rounded-lg bg-gray-700 px-3 py-1.5 text-xs font-bold text-gray-200">Trocar senha</button>
                         <button onClick={() => alternarAtivo(m)} className="rounded-lg bg-gray-700 px-3 py-1.5 text-xs font-bold text-gray-200">{m.ativo ? 'Desativar' : 'Ativar'}</button>
                     </div>
@@ -106,7 +114,8 @@ export const MotoboysSecao: React.FC = () => {
 
             <section className="space-y-2">
                 <h2 className="font-bold text-white">Repasses a pagar: {brl(totalPendente)}</h2>
-                <p className="text-xs text-gray-500">Faça o PIX para o motoboy e então marque como pago. O frete de cada entrega confirmada entra aqui.</p>
+                <p className="text-xs text-gray-500">Motoboy com carteira recebe o frete sozinho, por transferência do Asaas, logo depois da entrega. Aqui ficam só os que precisam de você: faça o PIX e marque como pago.</p>
+                {automaticos.length > 0 && <p className="text-xs text-blue-300">{automaticos.length} repasse(s) saindo automaticamente para a carteira ({brl(automaticos.reduce((s, r) => s + Number(r.valor), 0))}).</p>}
                 {motoboys.filter(m => pendentes.some(r => r.motoboy_id === m.id)).map(m => {
                     const meus = pendentes.filter(r => r.motoboy_id === m.id);
                     return (
@@ -120,7 +129,7 @@ export const MotoboysSecao: React.FC = () => {
                             </div>
                             {meus.map(r => (
                                 <div key={r.id} className="flex items-center gap-3 text-xs text-gray-400">
-                                    <span>{dataHora(r.criado_em)}</span><span className="text-gray-200">{brl(Number(r.valor))}</span><span className="flex-1 truncate">{r.observacao || ''}</span>
+                                    <span>{dataHora(r.criado_em)}</span><span className="text-gray-200">{brl(Number(r.valor))}</span><span className="flex-1 truncate">{r.ultimo_erro ? <span className="text-red-300">{r.ultimo_erro} </span> : null}{r.observacao || ''}</span>
                                     <button onClick={() => pagar([r.id])} className="rounded bg-gray-700 px-2 py-1 font-bold text-gray-200">Paguei</button>
                                 </div>
                             ))}

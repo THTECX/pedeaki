@@ -155,6 +155,7 @@ export const MotoboyPage: React.FC = () => {
                         <p className="text-lg font-bold leading-tight">Olá, {painel.nome.split(' ')[0]}</p>
                         <p className="text-xs">Hoje {brl(painel.ganhos_hoje)} | A receber {brl(painel.a_receber)}</p>
                     </div>
+                    <button onClick={() => navigate('/motoboy/perfil')} className={`${botao} bg-white/80 text-[#1F1F1F]`}>Perfil</button>
                     <button onClick={alternarOnline} disabled={ocupado} className={`${botao} ${painel.online ? 'bg-green-700 text-white' : 'bg-white text-gray-700'}`}>{painel.online ? 'Online' : 'Offline'}</button>
                 </div>
             </header>

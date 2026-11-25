@@ -39,6 +39,27 @@ export async function tratar({ tokenRecebido, corpo, env, buscar }) {
         const r = await sup('/rest/v1/rpc/pedido_pago', { method: 'POST', body: JSON.stringify({ p_order: orderId, p_payment: pagamento.id }) });
         resultado = r;
         if (r === 'estornar') await asaas(`/payments/${pagamento.id}/refund`, 'POST', { description: 'Pedido expirado ou cancelado antes do pagamento' });
+    } else if (String(evento.event).startsWith('ACCOUNT_STATUS_') && (evento.accountStatus || evento.account)) {
+        // Situacao da CARTEIRA (subconta do lojista ou do motoboy): aprovada, em analise, pendente, recusada
+        const st = evento.accountStatus || {};
+        const conta = st.id || (evento.account && evento.account.id);
+        const mudar = { atualizada_em: new Date().toISOString() };
+        if (st.general) mudar.status_geral = st.general;
+        if (st.documentation) mudar.status_documentos = st.documentation;
+        if (st.commercialInfo) mudar.status_comercial = st.commercialInfo;
+        if (st.bankAccountInfo) mudar.status_banco = st.bankAccountInfo;
+        if (conta) await sup(`/rest/v1/carteiras?asaas_account_id=eq.${encodeURIComponent(conta)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify(mudar) });
+        resultado = 'carteira';
+    } else if (String(evento.event).startsWith('TRANSFER_') && evento.transfer && String(evento.transfer.externalReference || '').startsWith('repasse:')) {
+        // Transferencia do frete ao motoboy: confirmada ou falhou
+        const id = String(evento.transfer.externalReference).slice(8);
+        if (evento.event === 'TRANSFER_DONE') {
+            await sup(`/rest/v1/repasses_motoboy?id=eq.${encodeURIComponent(id)}&status=neq.pago`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'pago', pago_em: new Date().toISOString(), asaas_transfer_id: evento.transfer.id, ultimo_erro: null }) });
+        } else if (evento.event === 'TRANSFER_FAILED' || evento.event === 'TRANSFER_CANCELLED') {
+            // volta para o Super Admin decidir (tentativas no maximo: a rotina automatica nao insiste)
+            await sup(`/rest/v1/repasses_motoboy?id=eq.${encodeURIComponent(id)}&status=neq.pago`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'pendente', tentativas: 5, ultimo_erro: `Transferencia ${evento.event === 'TRANSFER_FAILED' ? 'falhou' : 'cancelada'} no Asaas${evento.transfer.failReason ? ': ' + evento.transfer.failReason : ''}` }) });
+        }
+        resultado = 'repasse';
     } else if ((evento.event === 'PAYMENT_REFUNDED' || evento.event === 'PAYMENT_REFUND_IN_PROGRESS') && pagamento.id) {
         await sup(`/rest/v1/pagamentos?asaas_payment_id=eq.${encodeURIComponent(pagamento.id)}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'ESTORNADO', atualizado_em: new Date().toISOString() }) });
         if (orderId) await sup(`/rest/v1/orders?id=eq.${encodeURIComponent(orderId)}&payment_status=neq.pago_apos_vencer`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ payment_status: 'estornado' }) });

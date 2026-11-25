@@ -71,15 +71,17 @@ export function criarClientes(env, buscar) {
         return t ? JSON.parse(t) : null;
     };
     const baseAsaas = env.ASAAS_AMBIENTE === 'producao' ? 'https://api.asaas.com/v3' : 'https://api-sandbox.asaas.com/v3';
-    const asaas = async (caminho, metodo = 'GET', corpo) => {
+    // asaasCom(chave): mesma chamada com a chave de OUTRA conta (a chave de leitura da subconta do lojista ou do motoboy)
+    const asaasCom = (chave) => async (caminho, metodo = 'GET', corpo) => {
         const r = await buscar(`${baseAsaas}${caminho}`, {
             method: metodo,
-            headers: { access_token: env.ASAAS_API_KEY, 'Content-Type': 'application/json', 'User-Agent': 'pedeaki' },
+            headers: { access_token: chave, 'Content-Type': 'application/json', 'User-Agent': 'pedeaki' },
             body: corpo ? JSON.stringify(corpo) : undefined,
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) { const e = new Error(`asaas ${caminho}: ${r.status} ${JSON.stringify(j.errors || j).slice(0, 200)}`); e.status = r.status; e.asaas = j; throw e; }
         return j;
     };
-    return { sup, asaas };
+    const asaas = asaasCom(env.ASAAS_API_KEY);
+    return { sup, asaas, asaasCom };
 }

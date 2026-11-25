@@ -7,6 +7,7 @@ import { CamposFinanceiros } from './CamposFinanceiros';
 import { AcessoDoDono } from './AcessoDoDono';
 import { chamarAdmin, gerarSenha, useLogins } from './logins';
 import { Janela, BotaoCancelar, BotaoPrincipal } from './Janela';
+import { CarteiraJanela } from './CarteiraJanela';
 import { FIN_PADRAO, VALOR_PADRAO, CATEGORIAS_LOJA, DICAS_POR_CATEGORIA, SLUGS_RESERVADOS, limparSlug, brl, pct, type FormFinanceiro } from './util';
 
 const PlusIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>;
@@ -31,6 +32,7 @@ export const LojasSecao: React.FC = () => {
     const { stores, financeiros, padroes, cardapio, recarregar } = usePlataforma();
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [editingStore, setEditingStore] = useState<Store | null>(null);
+    const [carteiraDe, setCarteiraDe] = useState<Store | null>(null);
     const [criada, setCriada] = useState<{ nome: string; slug: string; email: string; senha: string; comLogin: boolean; aviso?: string } | null>(null);
     const { logins, recarregar: recarregarLogins } = useLogins();
     // Login do dono ao criar a loja: 'novo' (cria agora, junto), 'depois' ou o id de um login que já existe.
@@ -252,7 +254,10 @@ export const LojasSecao: React.FC = () => {
                                                 {store.is_active ? 'ATIVO' : 'SUSPENSO'}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-right">
+                                        <td className="p-4 text-right whitespace-nowrap">
+                                            {store.modelo === 'comissao' && (
+                                                <button onClick={() => setCarteiraDe(store)} className="text-orange-300 hover:text-orange-200 px-2 py-1 rounded hover:bg-gray-700 text-xs font-bold">Carteira</button>
+                                            )}
                                             <button onClick={() => openEditModal(store)} className="text-blue-400 hover:text-blue-300 p-2 rounded hover:bg-gray-700" aria-label="Editar loja">
                                                 <EditIcon />
                                             </button>
@@ -266,6 +271,7 @@ export const LojasSecao: React.FC = () => {
             </div>
 
             {/* Loja criada: o que falta fazer */}
+            {carteiraDe && <CarteiraJanela titulo={`Carteira: ${carteiraDe.name}`} tipo="loja" id={carteiraDe.id} onFechar={() => setCarteiraDe(null)} />}
             {criada && (
                 <Janela titulo="Loja criada" onFechar={() => setCriada(null)} rodape={<>
                     <BotaoCancelar rotulo="Copiar link da loja" onClick={() => { navigator.clipboard?.writeText(linkDaLoja(criada.slug)).catch(() => {}); }} />

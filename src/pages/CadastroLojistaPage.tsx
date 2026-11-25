@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { VERSAO_TERMOS } from '../legal/empresa';
 
 const CATEGORIAS = ['Lanchonete', 'Sorveteria / Açaí', 'Pizzaria', 'Restaurante', 'Padaria', 'Outros'];
-const SLUGS_RESERVADOS = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'assets', 'public', 'termos', 'privacidade', 'api', 'redefinir_senha', 'entrar'];
+const SLUGS_RESERVADOS = ['admin', 'login', 'super-admin', 'staff', 'acesso', 'hub-equipe', 'portal-equipe', 'garcom', 'waiter', 'entregador', 'tv', 'cadastro', 'shopping', 'assets', 'public', 'termos', 'privacidade', 'api', 'redefinir_senha', 'entrar', 'vitrine', 'perfil', 'motoboy', 'impulsionar', 'carteira', 'q'];
 
 const limparSlug = (texto: string) =>
     texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
