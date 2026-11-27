@@ -95,7 +95,7 @@ export const CarteiraPainel: React.FC<Props> = ({ quem, tipo, porAdmin }) => {
     if (!resp && !erro) return <div className="flex items-center gap-2 p-4 text-sm text-gray-600"><Loader2 size={16} className="animate-spin" />Abrindo a carteira...</div>;
 
     return (
-        <div className="campos-legiveis space-y-4 text-gray-900">
+        <div className="space-y-4 text-gray-900">
             {erro && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{erro}</p>}
 
             {/* ---------------- sem carteira ---------------- */}

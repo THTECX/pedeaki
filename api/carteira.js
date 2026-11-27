@@ -202,7 +202,9 @@ async function criar(quem, dados, { env, sup, asaas }) {
         await sup(`/rest/v1/carteiras?id=eq.${reserva.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }).catch(() => {});
         const msg = e.asaas && Array.isArray(e.asaas.errors) && e.asaas.errors[0] ? e.asaas.errors[0].description : null;
         console.error('carteira criar', e.message);
-        return { status: e.status && e.status < 500 ? 400 : 502, corpo: { erro: msg ? `O Asaas recusou: ${msg}` : 'Nao foi possivel criar a carteira agora. Tente de novo.' } };
+        // Sem descricao do Asaas: mostra o codigo e o comeco da resposta (sem chave nenhuma) para dar para saber o motivo.
+        const bruto = e.status ? `O Asaas respondeu ${e.status}${e.status === 401 ? ' (chave do Asaas invalida para este ambiente: confira ASAAS_API_KEY e ASAAS_AMBIENTE na Vercel)' : e.status === 403 ? ' (a conta do Pede Aki nao tem permissao para criar subcontas: falar com o Asaas)' : ''}: ${JSON.stringify(e.asaas || {}).slice(0, 160)}` : null;
+        return { status: e.status && e.status < 500 ? 400 : 502, corpo: { erro: msg ? `O Asaas recusou: ${msg}` : (bruto || 'Nao foi possivel criar a carteira agora. Tente de novo.') } };
     }
 
     // Daqui em diante a subconta EXISTE no Asaas: nada de apagar a reserva; erro vira aviso para o Super Admin.
